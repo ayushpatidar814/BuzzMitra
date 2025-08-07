@@ -227,7 +227,7 @@ export const getUserConnections = async (req, res) => {
 
         const  pendingConnections = (await Connection.find({to_user_id: userId, status: 'pending'}).populate('from_user_id')).map(connection=>connection.from_user_id)
 
-        res.json({success: true, connections, followes, following, pendingConnections})
+        res.json({success: true, connections, followers, following, pendingConnections})
 
     } catch (error){
         console.log(error);
@@ -248,7 +248,7 @@ export const acceptConnectionsRequest = async (req, res) => {
         }
 
         const user = await User.findById(userId);
-        User.connection.push(id);
+        user.connections.push(id);
         await user.save()
 
         const toUser = await User.findById(id);

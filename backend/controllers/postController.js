@@ -83,7 +83,7 @@ export const likePost = async (req, res) => {
             res.json({success: true, message: 'Post liked'});
         }
         
-        res.json({success: true, posts})
+        // res.json({success: true, posts})
     } catch(error){
         console.log(error);
         res.json({ success: false, message: error.message });

@@ -1,11 +1,12 @@
 import React from 'react'
-import { dummyConnectionsData } from '../assets/assets'
 import { Eye, MessageSquare } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 
 const Message = () => {
 
   const navigate = useNavigate();
+  const { connections } = useSelector((state)=>state.connections)
 
   return (
     <div className='min-h-screen relative bg-slate-50'>
@@ -19,7 +20,7 @@ const Message = () => {
 
         {/* Contact User */}
         <div className="flex flex-col gap-">
-          {dummyConnectionsData.map((user)=>(
+          {connections.map((user)=>(
             <div key={user._id} className="max-w-xl flex flex-wrap gap-5 p-6 bg-white rounded-md shadow">
               <img src={user.profile_picture} alt="profile_picture" className='rounded-full size-12 mx-auto' />
               <div className='flex-1'>

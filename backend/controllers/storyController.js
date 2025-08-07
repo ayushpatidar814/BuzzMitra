@@ -2,6 +2,7 @@ import fs from 'fs'
 import imagekit from '../configs/imagekit.js';
 import Story from '../models/Story.js';
 import User from '../models/User.js';
+import { inngest } from '../inngest/index.js';
 
 // Add user story
 export const addUserStory = async (req, res) => {
@@ -9,7 +10,7 @@ export const addUserStory = async (req, res) => {
     const { userId } = req.auth();
     const {content, media_type, background_color} = req.body;
     const media = req.file
-    const media_url = ''
+    let media_url = ''
 
     // Upload media to imagekit
     if(media_type === 'image' || media_type === 'video'){
