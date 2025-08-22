@@ -7,7 +7,7 @@ const Login = () => {
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Background Image */}
-      <img src='./bgImage.png' alt="logo" className='absolute top-0 left-0 -z-1 w-full h-full object-cover' />
+      <img src='./bgImage2.png' alt="logo" className='absolute top-0 left-0 -z-1 w-full h-full object-cover opacity-30' />
 
       {/* left-side */}
       <div className="flex-1 flex flex-col items-start justify-between p-6 md:p-10 lg:pl-40">
