@@ -12,7 +12,7 @@ const Login = () => {
       {/* left-side */}
       <div className="flex-1 flex flex-col items-start justify-between p-6 md:p-10 lg:pl-40">
         <img src='./logo-transparent.png' alt="logo" className='h-44 object-contain' />
-        <div
+        <div>
           <div className="flex items-center gap-3 mb-4 max-md:mt-10">
             <img src='./group_users.png' alt="group image" className='h-8 md:h-10' />
             <div>
