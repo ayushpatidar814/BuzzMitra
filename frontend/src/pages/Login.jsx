@@ -18,12 +18,24 @@ const Login = () => {
             <div>
               <div className="flex">
                 {Array(5).fill(0).map((_, i) => (<Star key={i} className="size-4 md:size-4.5 text-transparent fill-amber-500" /> ))}
-              </div>
-              <p>Used by 123k+ Users Worldwide</p>
+              </div>      
+              <p className="text-sm md:text-base text-indigo-900">
+                Trusted by <span className="font-semibold">123k+ users worldwide</span>
+              </p>
             </div>
           </div>
-          <h1 className="text-3xl md:text-6xl md:pb-2 font-bold bg-gradient-to-r from-indigo-950 to-indigo-800 bg-clip-text-transparent">More than just friends truly connect</h1>
-          <p className="text-xl md:text-3xl text-indigo-900 max-w-72 md:max-w-md">Connect with global community on pingup.</p>
+
+          <h1 className="text-3xl md:text-6xl md:pb-2 font-extrabold bg-gradient-to-r from-indigo-900 via-indigo-700 to-purple-600 bg-clip-text text-transparent leading-tight">
+            Where Connections Become Friendships
+          </h1>
+
+          <p className="text-lg md:text-2xl text-indigo-800 max-w-72 md:max-w-lg mt-2">
+            Join <span className="font-semibold">BuzzMitra</span> — the place to share, discover, and grow with a global community.
+          </p>
+
+          <p className="text-base md:text-xl text-indigo-700 mt-3 italic">
+            Because every buzz matters. 🐝
+          </p>
         </div>
         <span className="md:h-10"></span>
       </div>
