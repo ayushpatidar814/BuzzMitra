@@ -6,7 +6,7 @@ import Story from "../models/Story.js";
 import Message from "../models/Message.js";
 
 // Create a client to send and receive events
-export const inngest = new Inngest({ id: "linkora-app" });
+export const inngest = new Inngest({ id: "buzzmitra-app" });
 
 // Inngest Function to save user data to a database
 const syncUserCreation = inngest.createFunction(
@@ -72,7 +72,7 @@ const syncUserCreation = inngest.createFunction(
                                 <p>You have a new connection request from ${connection.from_user_id.full_name} - @${connection.from_user_id.username}</p>
                                 <p>Click <a href="${process.env.FRONTED_URL}/connections" style='color:#10b981;'>here</a> to accept or reject the request</p>
                                 <br />
-                                <p>Thanks,<br />Linkora - Stay Connected</p>
+                                <p>Thanks,<br />BuzzMitra - Stay Connected</p>
                               </div>`;
 
                               await sendEmail({
@@ -97,7 +97,7 @@ const syncUserCreation = inngest.createFunction(
                                 <p>You have a new connection request from ${connection.from_user_id.full_name} - @${connection.from_user_id.username}</p>
                                 <p>Click <a href="${process.env.FRONTED_URL}/connections" style='color:#10b981;'>here</a> to accept or reject the request</p>
                                 <br />
-                                <p>Thanks,<br />Linkora - Stay Connected</p>
+                                <p>Thanks,<br />BuzzMitra - Stay Connected</p>
                               </div>`;
 
                               await sendEmail({
@@ -149,7 +149,7 @@ const sendNotificationOfUnseenMessages = inngest.createFunction(
                             <p>You have ${unseenCount[userId]} unseen messages</p>
                             <p>Click <a href="${process.env.FRONTEND_URL}/messages" style='color: #10b981;'>here</a> to view them</p>
                             <br />
-                            <p>Thanks,<br />Linkora- Stay Connected</p>
+                            <p>Thanks,<br />BuzzMitra- Stay Connected</p>
                         </div>
             `;
 
