@@ -59,7 +59,6 @@ const App = () => {
     }
   },[user, dispatch])
   
-  const ayush = "ayush";
   return (
     <>
     <Toaster />
