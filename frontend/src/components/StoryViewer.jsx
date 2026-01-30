@@ -2,17 +2,17 @@ import React from 'react'
 import { BadgeCheck, X } from 'lucide-react'
 import { useState, useEffect } from 'react';
 
-const StoryViewer = ({viewStory, setViewStory}) => {
+const StoryViewer = ({viewStory, setViewStory, stories}) => {
 
     const [progress, setProgress] = useState(0)
 
     useEffect(() => {
         let timer, progressInterval;
-        if(viewStory && viewStory.media_type !== 'text') {
+        if(viewStory) {
             // Reset progress
             setProgress(0);
            
-            const duration = 10000;
+            const duration = 8000;
             const setTime = 100;
             let elapsed = 0;
            
@@ -22,16 +22,24 @@ const StoryViewer = ({viewStory, setViewStory}) => {
                 setProgress((elapsed / duration) * 100);
             }, setTime);
 
-                // close story after duration(10 sec)
+                // close story after duration(8 sec)
                 timer = setTimeout(() => {
-                    setViewStory(null);
-                }, duration); 
+                    // Find index of current story
+                    const currentIndex = stories.findIndex((story) => story.id === viewStory.id);
+      
+                  if (currentIndex < stories.length - 1) {
+                    setViewStory(stories[currentIndex + 1]);
+                    console.log("Reached");
+                  } else{
+                    setViewStory(null)
+                  }
+                }, duration);
             }
             return () => {
                 clearTimeout(timer);
                 clearInterval(progressInterval);
             }
-    }, [viewStory, setViewStory])
+    }, [viewStory, setViewStory, stories])
     
     if(!viewStory) return null;
 

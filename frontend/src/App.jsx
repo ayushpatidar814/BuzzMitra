@@ -59,7 +59,6 @@ const App = () => {
     }
   },[user, dispatch])
   
-  
   return (
     <>
     <Toaster />

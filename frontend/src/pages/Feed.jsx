@@ -7,6 +7,7 @@ import PostCard from '../components/PostCard';
 import RecentMessages from '../components/RecentMessages';
 import { useAuth } from '@clerk/clerk-react';
 import api from '../api/axios';
+import toast from 'react-hot-toast';
 
 const Feed = () => {
   
