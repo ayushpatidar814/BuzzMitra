@@ -1,7 +1,6 @@
-// models/Message.js
 import mongoose from "mongoose";
 
-const messageSchema = new mongoose.Schema({
+const messageWSSchema = new mongoose.Schema({
   chatId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Chat",
@@ -22,8 +21,8 @@ const messageSchema = new mongoose.Schema({
 
   type: {
     type: String,
-    enum: ["text", "image", "video", "file", "audio"],
-    // required: true
+    enum: ["text", "media"],
+    required: true
   },
 
   // TEXT MESSAGE
@@ -34,19 +33,18 @@ const messageSchema = new mongoose.Schema({
 
   // MEDIA MESSAGE
   media: {
-    url: String,        // S3 / Supabase public URL
+    type: String,        // S3 / Supabase public URL
     thumbnail: String, // for video/image preview
     size: Number,       // bytes
     mimeType: String
   },
 
   messageId: {
-    type: String,
-    unique: true,
-    default: () => new mongoose.Types.ObjectId().toString(),
-    index: true,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "MessageWS",
+    required: true,
   },
-
+  
   deletedAt: {
     type: Date,
     default: null,
@@ -54,9 +52,8 @@ const messageSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-messageSchema.index(
-  { deletedAt: 1 },
-  { expireAfterSeconds: 30 * 24 * 60 * 60 } // 30 days
-);
+messageWSSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+messageWSSchema.index({ chatId: 1, createdAt: -1 });
+messageWSSchema.index({ senderId: 1, receiverId: 1 });
 
-export default mongoose.model("MessageWS", messageSchema);
+export default mongoose.model("MessageWS", messageWSSchema);

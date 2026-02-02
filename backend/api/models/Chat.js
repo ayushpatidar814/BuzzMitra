@@ -2,11 +2,12 @@ import mongoose from "mongoose";
 
 const chatSchema = new mongoose.Schema(
   {
-    participants: [{ 
+    participants: { 
       type: [String], 
       ref: "User",
       index: true, 
-    }],
+      required: true
+    },
     isGroup: { 
       type: Boolean, 
       default: false 
@@ -18,7 +19,5 @@ const chatSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-chatSchema.index({ participants: 1 }, { unique: true });
 
 export default mongoose.model("Chat", chatSchema);
