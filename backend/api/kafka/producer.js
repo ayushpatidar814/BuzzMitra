@@ -1,5 +1,4 @@
 import { kafkaProducer } from "../configs/kafka.js";
-import { TOPICS } from "./topics.js";
 
 export const connectProducer = async () => {
   await kafkaProducer.connect();
@@ -8,7 +7,7 @@ export const connectProducer = async () => {
 
 export const sendMessageToKafka = async (payload) => {
   await kafkaProducer.send({
-    topic: TOPICS.CHAT_MESSAGE,
+    topic: "chat-messages",
     messages: [
       {
         key: payload.receiverId,

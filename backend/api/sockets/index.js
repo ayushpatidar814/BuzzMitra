@@ -3,26 +3,34 @@ import { socketAuthMiddleware } from "./auth.socket.js";
 import { presenceSocket } from "./presence.socket.js";
 import { chatSocketHandler } from "./chat.socket.js"; // (next step)
 
+let io;
+
 export const initSocket = (server) => {
-  const io = new Server(server, {
+  io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL,
+      origin: [
+        "http://localhost:5173",
+        "https://buzzmitra.vercel.app",
+      ],
       credentials: true,
     },
   });
 
   // 🔐 Auth middleware
-  socketAuthMiddleware(io);
+  io.use(socketAuthMiddleware);
 
   io.on("connection", (socket) => {
-    console.log("🔌 User connected:", socket.user.id);
+    const userId = socket.user.id;
+    console.log("🔌 User connected:", userId);
 
-    // 👤 Presence
+    // Join user-specific room
+    socket.join(userId);
+
     presenceSocket(io, socket);
-
-    // 💬 Chat (already planned)
     chatSocketHandler(io, socket);
   });
 
   return io;
 };
+
+export const getIO = () => io;

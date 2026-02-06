@@ -1,29 +1,24 @@
-import jwt from "jsonwebtoken";
+import { verifyToken } from "@clerk/backend";
 
-/**
- * Socket authentication middleware
- */
-export const socketAuthMiddleware = (io) => {
-  io.use((socket, next) => {
-    try {
-      const token =
-        socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization?.split(" ")[1];
+export const socketAuthMiddleware = async (socket, next) => {
+  try {
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.split(" ")[1];
 
-      if (!token) {
-        return next(new Error("Authentication token missing"));
-      }
+    if (!token) throw new Error("No token provided");
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY,
+    });
 
-      socket.user = {
-        id: decoded.id,
-        role: decoded.role,
-      };
+    socket.user = {
+      id: payload.sub, // Clerk userId
+    };
 
-      next();
-    } catch (error) {
-      next(new Error("Invalid or expired token"));
-    }
-  });
+    next();
+  } catch (err) {
+    console.error("🔐 Socket auth failed:", err.message);
+    next(new Error("Invalid token"));
+  }
 };

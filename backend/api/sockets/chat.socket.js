@@ -1,48 +1,40 @@
-import { kafkaProducer } from "../configs/kafka.js";
+// sockets/chat.socket.js
+import { sendMessageToKafka } from "../kafka/producer.js";
 
 export const chatSocketHandler = (io, socket) => {
 
+  // sockets/chat.socket.js
+  socket.on("join_chat", (chatId) => {
+    if (!chatId) return;
+    socket.join(chatId); // ✅ join room for this chat
+    console.log(`User ${socket.user.id} joined chat ${chatId}`);
+  });
+
   socket.on("send_message", async (payload) => {
     try {
-      /*
-        payload = {
-          chatId,
-          type,
-          text?,
-          media?,
-          messageId
-        }
-      */
-  
-      if (!payload.chatId || !payload.messageId) {
-        throw new Error("Invalid payload");
-      }
-  
+      if (!payload.chatId || !payload.messageId || !payload.receiverId) return;
+
       const message = {
         ...payload,
-        sender: socket.userId,
-        createdAt: Date.now()
+        senderId: socket.user.id,
+        createdAt: new Date().toISOString(),
       };
-  
-      // 🚀 Push to Kafka (NOT DB)
-      await kafkaProducer.send({
-        topic: "chat-messages",
-        messages: [
-          {
-            key: payload.chatId,
-            value: JSON.stringify(message)
-          }
-        ]
-      });
-  
-      // ⚡ Optional: instant ACK to sender
-      socket.emit("message_queued", {
-        messageId: payload.messageId
-      });
-    } catch (error) {
-      socket.emit("socket:error", {
-        message: error.message
-      })
+
+      await sendMessageToKafka(message);
+
+      socket.emit("message_queued", { messageId: message.messageId });
+    } catch (err) {
+      console.error(err);
+      socket.emit("socket:error", { message: err.message });
     }
+  });
+
+  // Typing indicator
+  socket.on("typing", ({ chatId, isTyping }) => {
+    socket.to(chatId).emit("typing", {
+      chatId,
+      userId: socket.user.id,
+      isTyping,
+    });
   });
 };

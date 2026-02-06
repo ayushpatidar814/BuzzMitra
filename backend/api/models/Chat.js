@@ -12,6 +12,9 @@ const chatSchema = new mongoose.Schema(
       type: Boolean, 
       default: false 
     },
+    user: {
+      type: {},
+    },
     lastMessage: { 
       type: mongoose.Schema.Types.ObjectId, 
       ref: "MessageWS" 

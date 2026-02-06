@@ -1,5 +1,4 @@
 import { kafkaAdmin } from "../configs/kafka.js";
-import { TOPICS } from "./topics.js";
 
 export const createTopics = async () => {
   await kafkaAdmin.connect();
@@ -8,7 +7,7 @@ export const createTopics = async () => {
     waitForLeaders: true,
     topics: [
       {
-        topic: TOPICS.CHAT_MESSAGE,
+        topic: "chat-messages",
         numPartitions: 3,
         replicationFactor: 1,
       },

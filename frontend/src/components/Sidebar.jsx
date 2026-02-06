@@ -4,6 +4,7 @@ import MenuItems from './MenuItems';
 import { CirclePlus, LogOut } from 'lucide-react';
 import { UserButton, useClerk } from '@clerk/clerk-react';
 import { useSelector } from 'react-redux';
+import Loading from './Loading';
 
 const Sidebar = ({sidebarOpen, setSidebarOpen}) => {
 

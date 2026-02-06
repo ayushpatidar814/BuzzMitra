@@ -11,6 +11,7 @@ const Layout = () => {
   const user = useSelector((state)=>state.user.value)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+
   return user ? (
     <div className='w-full flex h-screen'>
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
@@ -27,6 +28,7 @@ const Layout = () => {
     </div>
   )
   : (
+    // <Loading />
     <Loading />
   )
 }

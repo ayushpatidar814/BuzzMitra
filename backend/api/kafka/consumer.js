@@ -1,12 +1,11 @@
 import { kafkaConsumer } from "../configs/kafka.js";
-import { TOPICS } from "./topics.js";
 import { saveMessage } from "../services/message.service.js";
 
 export const startConsumer = async (io) => {
   const consumer = kafkaConsumer("chat-consumer-group");
 
   await consumer.connect();
-  await consumer.subscribe({ topic: TOPICS.CHAT_MESSAGE, fromBeginning: false });
+  await consumer.subscribe({ topic: "chat-messages", fromBeginning: false });
 
   await consumer.run({
     eachMessage: async ({ message }) => {
@@ -24,11 +23,11 @@ export const startConsumer = async (io) => {
           console.warn("⚠️ Missing required fields, skipping");
           return;
         }
-  
+        
         const saved = await saveMessage(payload);
-  
-        io.to(payload.receiverId).emit("new-message", saved);
-        io.to(payload.senderId).emit("message-delivered", saved._id);
+        if(!saved) return;
+        
+        io.to(saved.chatId.toString()).emit("new_message", saved);
       } catch (error) {
         console.error("❌ Failed to process message", error);
       }

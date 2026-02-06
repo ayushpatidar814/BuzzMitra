@@ -1,52 +1,53 @@
 import mongoose from "mongoose";
 import Chat from "../models/Chat.js";
 import MessageWS from "../models/MessageWS.js";
-import { sendMessageToKafka } from "../kafka/producer.js";
-import { generateSnowflakeId } from '../utils/snowflake.js'
 import imagekit from "../configs/imagekit.js";
+import User from "../models/User.js";
+import fs from 'fs';
 
-const sendMessage = async (req, res) => {
+const uploadMedia = async (req, res) => {
   try {
     const { userId } = req.auth();
-    const { receiverId, text = "" } = req.body;
-  
-    if(!receiverId || receiverId === userId){
-      return res.json({success: false, message: "Invalid Receiver"})
-    }
 
-    if(!text && !req.file){
-      return res.json({success: false, message: "Message can not be empty"})
+    let file = req.file;
+
+    if(!file){
+      return res.json({success: false, message: "Media can not be empty"})
     }
 
     let media = null;
 
-    if(req.file){
+    if (file) {
+      const buffer = await fs.readFileSync(file.path);
+
       const uploadRes = await imagekit.upload({
-        file: req.file.buffer,
-        fileName: `${userId}-${Date.now()}`,
+        file: buffer,
+        fileName: `${userId}-${Date.now()}-${file.originalname}`,
         folder: "chat-media",
       });
+
+      if (!uploadRes?.url) {
+        fs.unlink(file.path, () => {});
+        return res.status(500).json({
+          success: false,
+          message: "Media upload failed",
+        });
+      }
 
       media = {
         url: uploadRes.url,
         thumbnail: uploadRes.thumbnailUrl || "",
-        size: req.file.size,
-        mimeType: req.file.mimeType,
+        size: file.size,
+        mimeType: file.mimetype,
       };
-    }
 
-    const message = {
-      messageId: generateSnowflakeId(),
-      senderId: userId,
-      receiverId,
-      text,
-      type: media ? 'media' : 'text',
+      fs.unlink(file.path, () => {});
+    }
+  
+    res.status(200).json({
+      success: true,
       media,
-    };
-  
-    await sendMessageToKafka(message);
-  
-    res.status(200).json({ success: true, message: "Message sent" });
+    });
   } catch (error) {
     console.log(error)
     res.json({success: false, message: error.message})
@@ -57,12 +58,45 @@ const getChats = async (req, res) => {
   try {
     const { userId } = req.auth();
 
-    const chats = await Chat.find({ participants: userId }).populate("lastMessage").sort({ updatedAt: -1 });
+    const chats = await Chat.find({
+      participants: userId,
+      isGroup: false,
+    })
+      .populate("lastMessage")
+      .sort({ updatedAt: -1 });
 
-    res.json({ success: true, data: chats || [] });
-  } catch (error) {
-    console.log(error)
-    res.json({success: false, message: error.message})
+    // extract other user ids
+    const otherUserIds = chats.map(chat =>
+      chat.participants.find(id => id !== userId)
+    );
+
+    // fetch user profiles
+    const users = await User.find(
+      { _id: { $in: otherUserIds } },
+      "full_name username profile_picture"
+    );
+
+    // map users by id
+    const userMap = {};
+    users.forEach(u => {
+      userMap[u._id] = u;
+    });
+
+    // build final response
+    const formattedChats = chats.map(chat => {
+      const otherUserId = chat.participants.find(id => id !== userId);
+
+      return {
+        _id: chat._id,
+        otherUser: userMap[otherUserId],
+        lastMessage: chat.lastMessage,
+        updatedAt: chat.updatedAt,
+      };
+    });
+
+    res.json({ success: true, data: formattedChats });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -75,19 +109,47 @@ const getMessages = async (req, res) => {
       return res.json({ success: false, message: "Invalid chatId" });
     }
 
+    // fetch chat
     const chat = await Chat.findById(chatId);
     if (!chat || !chat.participants.includes(userId)) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
 
-    const messages = await MessageWS.find({ chatId, deletedAt: null }).sort({ createdAt: -1 }).limit(50);
-  
-    res.json({ success: true, data: messages });
+    // find receiver id
+    const receiverId = chat.participants.find(
+      (id) => id.toString() !== userId
+    );
+
+    // fetch receiver profile
+    const receiver = await User.findById(
+      receiverId,
+      "full_name username profile_picture"
+    );
+
+    // fetch messages
+    const messages = await MessageWS.find({
+      chatId,
+      deletedAt: null,
+    })
+      .sort({ createdAt: 1 }) // oldest → newest (better for UI)
+      .limit(50);
+
+    res.json({
+      success: true,
+      data: {
+        receiver,
+        messages,
+      },
+    });
   } catch (error) {
-    console.log(error)
-    res.json({success: false, message: error.message})
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
+
 
 const deleteMessage = async (req, res) => {
   try {
@@ -219,27 +281,32 @@ const getOrCreateChat = async (req, res) => {
     const { userId } = req.auth();
     const { receiverId } = req.body;
 
-    if(!receiverId){
-      return res.json({success: false, message: "Receiver Id is required"})
+    if (!receiverId) {
+      return res.json({ success: false, message: "Receiver Id is required" });
     }
 
-    if(userId === receiverId){
-      return res.json({success: false, message: "Send message to friends"})
+    if (userId === receiverId) {
+      return res.json({ success: false, message: "Cannot chat with yourself" });
     }
 
-    const chat = await Chat.findOneAndUpdate(
-      {
+    const user = await User.findById(receiverId).select("fullName username avatar")
+    const participants = [userId, receiverId].sort();
+
+    // 1️⃣ Try to find existing chat
+    let chat = await Chat.findOne({
+      isGroup: false,
+      participants,
+
+    });
+
+    // 2️⃣ If not found, create new chat
+    if (!chat) {
+      chat = await Chat.create({
+        participants,
         isGroup: false,
-        participants: { $all: [userId, receiverId] },
-      },
-      {
-        $setOnInsert: {
-          participants: [userId, receiverId],
-          isGroup: false,
-        },
-      },
-      { new: true, upsert: true }
-    );
+        user,
+      });
+    }
 
     res.json({ success: true, data: chat });
   } catch (err) {
@@ -247,4 +314,5 @@ const getOrCreateChat = async (req, res) => {
   }
 };
 
-export { sendMessage, getChats, getMessages, deleteMessage, markAsRead, editMessage, sendTyping, getOrCreateChat }
+
+export { uploadMedia, getChats, getMessages, deleteMessage, markAsRead, editMessage, sendTyping, getOrCreateChat }

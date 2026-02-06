@@ -28,21 +28,37 @@ const messageWSSchema = new mongoose.Schema({
   // TEXT MESSAGE
   text: {
     type: String,
-    trim: true
+    trim: true,
+    default: "",
   },
 
   // MEDIA MESSAGE
   media: {
-    type: String,        // S3 / Supabase public URL
-    thumbnail: String, // for video/image preview
-    size: Number,       // bytes
-    mimeType: String
+    url: {
+      type: String,
+      required: function () {
+        return this.type === "media";
+      },
+    },        
+    thumbnail: {
+      type: String,
+      defult: "",
+    }, // for video/image preview
+    size: {
+      type: Number,
+      default: 0
+    },
+    mimeType: {
+      type: String,
+      default: ""
+    },
   },
 
   messageId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "MessageWS",
+    type: String,
     required: true,
+    unique: true,
+    index: true,
   },
   
   deletedAt: {

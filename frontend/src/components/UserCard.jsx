@@ -31,7 +31,7 @@ const UserCard = ({user}) => {
     }
 
     const handleConnectRequest = async () => {
-        if(currentUser.connections.includes(user._id)){
+        if(currentUser?.connections?.includes(user._id)){
             return navigate('/messages/' + user._id)
         }
         try {
@@ -49,7 +49,7 @@ const UserCard = ({user}) => {
     }
 
   return (
-    <div key={user._id} className='p-4 pt-6 flex flex-col justify-between w-72 shadow border border-gray-200 rounded-md'>
+    <div className='p-4 pt-6 flex flex-col justify-between w-72 shadow border border-gray-200 rounded-md'>
         <div className="text-center">
             <img src={user.profile_picture} alt="profile_picture" className='rounded-full w-16 shadow-md mx-auto' />
             <p className="mt-4 font-semibold">{user.full_name}</p>
@@ -69,14 +69,14 @@ const UserCard = ({user}) => {
         <div className='flex mt-4 gap-2'>
             
             {/* Follow Button */}
-            <button onClick={handleFollow} disabled={currentUser?.following.includes(user._id)} className={`w-full py-2 rounded-md flex justify-center items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo600 hover:to-purple-700 active:scale-95 transition cursor-pointer text-white`}>
+            <button onClick={handleFollow} disabled={currentUser?.following?.includes(user._id)} className={`w-full py-2 rounded-md flex justify-center items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo600 hover:to-purple-700 active:scale-95 transition cursor-pointer text-white`}>
                 <UserPlus className='w-4 h-4' />
-                {currentUser?.following.includes(user._id) ? 'Following' : 'Follow'}
+                {currentUser?.following?.includes(user._id) ? 'Following' : 'Follow'}
             </button>
 
             {/* Connection Request Button / Message Button */}
             <button onClick={handleConnectRequest} className='flex items-center justify-center w-16 border text-slate-500 group rounded-md active:scale-95 transition cursor-pointer'>
-                {currentUser?.connections.includes(user._id) ? 
+                {currentUser?.connections?.includes(user._id) ? 
                     <MessageCircle className='w-5 h-5 group-hover:scale-105 transition' /> 
                     :
                     <Plus className='w-5 h-5 group-hover:scale-105 transition' />    

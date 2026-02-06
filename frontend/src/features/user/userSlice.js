@@ -3,14 +3,21 @@ import api from "../../api/axios.js";
 import toast from "react-hot-toast";
 
 const initialState = {
-    value: null
+    value: JSON.parse(localStorage.getItem("user")) || null
 }
 
 export const fetchUser = createAsyncThunk('user/fetchUser', async(token) => {
     const { data } = await api.get('/api/user/data', {
         headers: {Authorization: `Bearer ${token}`}
     })
-    return data.success ? data.user : null
+  
+    if (data.success) {
+    // Merge API userId with localStorage user
+    const localUser = JSON.parse(localStorage.getItem("user")) || {};
+    return { ...localUser, _id: data.userId };
+  }
+
+  return null;
 })
 
 export const updateUser = createAsyncThunk('user/update', async({userData, token}) => {
