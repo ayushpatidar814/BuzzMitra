@@ -9,7 +9,6 @@ export const createTopics = async () => {
       {
         topic: "chat-messages",
         numPartitions: 3,
-        replicationFactor: 1,
       },
     ],
   });

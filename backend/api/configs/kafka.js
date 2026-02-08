@@ -1,10 +1,15 @@
+import 'dotenv/config';
 import { Kafka, logLevel } from "kafkajs";
 
 const kafka = new Kafka({
-  clientId: process.env.KAFKA_CLIENT_ID || "social-media-app",
-  brokers: process.env.KAFKA_BROKERS
-    ? process.env.KAFKA_BROKERS.split(",")
-    : ["localhost:9092"],
+  clientId: process.env.KAFKA_CLIENT_ID || "buzzmitra-backend",
+  brokers: process.env.KAFKA_BROKERS.split(","),
+  ssl: true,
+  sasl: {
+    mechanism: "scram-sha-512", // Redpanda config
+    username: process.env.KAFKA_USERNAME,
+    password: process.env.KAFKA_PASSWORD,
+  },
 
   retry: {
     initialRetryTime: 300,
