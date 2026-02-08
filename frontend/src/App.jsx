@@ -60,23 +60,6 @@ const App = () => {
   //   }
   // },[user, dispatch])
 
-<<<<<<< HEAD
-=======
-        if(pathnameRef.current === ('/messages/' + message.from_user_id._id)){
-          dispatch(addMessage(message))
-        } else{
-          toast.custom((t)=>(
-            <Notification t={t} message={message} />
-          ), {position: 'bottom-right'})
-        }
-      }
-      return ()=>{
-        eventSource.close()
-      }
-    }
-  },[user, dispatch])
-  
->>>>>>> main
   return (
     <>
       <Toaster />
@@ -100,8 +83,4 @@ const App = () => {
   );
 };
 
-<<<<<<< HEAD
 export default App;
-=======
-export default App
->>>>>>> main
