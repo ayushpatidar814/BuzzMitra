@@ -1,7 +1,8 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import http from 'http';
 import express from 'express';
 import cors from 'cors';
+import path from "path";
 import connectDB from './configs/db.js';
 
 import { inngest, functions } from './inngest/index.js';
@@ -19,6 +20,8 @@ import messageRouter from './routes/messageRoutes.js';
 import chatRouter from './routes/chatRoutes.js';
 import { createTopics } from './kafka/createTopics.js';
 
+dotenv.config({ path: path.resolve('./api/.env') });
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -30,7 +33,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://your-vercel-app.vercel.app",
+      "https://buzzmitra.vercel.app",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
