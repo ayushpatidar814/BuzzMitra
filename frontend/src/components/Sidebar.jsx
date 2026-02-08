@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Home,
@@ -10,7 +9,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { UserButton, useClerk, useUser } from "@clerk/clerk-react";
-import { useSocket } from "../hooks/useSocket";
+import { useSelector } from "react-redux";
+import { selectTotalUnread } from "../features/messagesWS/chatSelectors";
 
 /* ---------------- MENU ASSETS ---------------- */
 
@@ -28,24 +28,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   const navigate = useNavigate();
   const { signOut } = useClerk();
   const { user } = useUser();
-  const socket = useSocket();
 
-  const [unreadChats, setUnreadChats] = useState(0);
-
-  /* 🔌 SOCKET: unread chat count */
-  useEffect(() => {
-    if (!socket || !user?.id) return;
-
-    socket.emit("join_user", user.id);
-
-    socket.on("unread_chats_count", ({ count }) => {
-      setUnreadChats(count);
-    });
-
-    return () => {
-      socket.off("unread_chats_count");
-    };
-  }, [socket, user?.id]);
+  const unreadChats = useSelector(selectTotalUnread);
 
   return (
     <div

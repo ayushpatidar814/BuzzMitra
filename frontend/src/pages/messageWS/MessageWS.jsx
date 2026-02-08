@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { MessageSquare, Search, MoreVertical } from "lucide-react";
 import { useAuth, useUser } from "@clerk/clerk-react";
@@ -7,7 +6,10 @@ import { useAuth, useUser } from "@clerk/clerk-react";
 import api from "../../api/axios";
 import toast from "react-hot-toast";
 import Loading from "../../components/Loading";
-import { useSocket } from "../../hooks/useSocket.js";
+import { useDispatch, useSelector } from "react-redux";
+import { resetChatUnread } from "../../features/messagesWS/chatCountSlice";
+import { useSocket } from "../../hooks/useSocket";
+
 
 const MessageWS = () => {
   const [chats, setChats] = useState([]);
@@ -18,11 +20,15 @@ const MessageWS = () => {
 
   const navigate = useNavigate();
   const { getToken } = useAuth();
+  const dispatch = useDispatch();
   
   const { user } = useUser();
   const socket = useSocket();
 
   const { connections = [] } = useSelector((state) => state.connections);
+  
+  const { perChat } = useSelector((state) => state.chatCount );
+
 
   /* ---------------- fetch chats ---------------- */
 
@@ -51,12 +57,6 @@ const MessageWS = () => {
     fetchChats();
   }, []);
 
-  /* ---------------- socket: join user ---------------- */
-
-  useEffect(() => {
-    if (!socket || !user?.id) return;
-    socket.emit("join_user", user.id);
-  }, [socket, user?.id]);
 
 
   /* ---------------- socket: inbox messages ---------------- */
@@ -66,14 +66,12 @@ const MessageWS = () => {
     const handleInboxMessage = (message) => {
       setChats((prev) => {
         const index = prev.findIndex((c) => c._id === message.chatId);
-        const isIncoming = message.receiverId === user.id;
 
         // 🔹 Chat already exists
         if (index !== -1) {
           const updatedChat = {
             ...prev[index],
             lastMessage: message,
-            unreadMessages: isIncoming ? (prev[index].unreadMessages || 0) + 1 : prev[index].unreadMessages,
             updatedAt: message.createdAt,
           };
 
@@ -98,7 +96,6 @@ const MessageWS = () => {
               profile_picture: "/default-avatar.png",
             },
             lastMessage: message,
-            unreadMessages: 1,
             updatedAt: message.createdAt,
           },
           ...prev,
@@ -115,62 +112,6 @@ const MessageWS = () => {
   }, [socket, user?.id, connections]);
 
 
-  /* ---------------- socket: message status ---------------- */
-  useEffect(() => {
-    if (!socket) return;
-
-    const updateStatus = ({ messageId, status }) => {
-      setChats(prev =>
-        prev.map(chat =>
-          chat.lastMessage?.messageId === messageId && chat.lastMessage.status !== "read"
-            ? {
-                ...chat,
-                lastMessage: {
-                  ...chat.lastMessage,
-                  status,
-                },
-              }
-            : chat
-        )
-      );
-    };
-
-    socket.on("message_delivered", ({ messageId }) =>
-      updateStatus({ messageId, status: "delivered" })
-    );
-
-    socket.on("message_read", ({ messageId }) =>
-      updateStatus({ messageId, status: "read" })
-    );
-
-    return () => {
-      socket.off("message_delivered");
-      socket.off("message_read");
-    };
-  }, [socket]);
-
-
-  /* ---------------- socket: chat cleared (multi-tab) ---------------- */
-
-  useEffect(() => {
-    if (!socket || !user?.id) return;
-
-    const onChatCleared = ({ chatId, userId }) => {
-      if (userId !== user.id) return;
-
-      setChats((prev) =>
-        prev.map((c) =>
-          c._id === chatId
-            ? { ...c, lastMessage: null, unreadMessages: 0 }
-            : c
-        )
-      );
-    };
-
-    socket.on("chat:cleared", onChatCleared);
-    return () => socket.off("chat:cleared", onChatCleared);
-  }, [socket, user?.id]);
-
   /* ---------------- clear chat ---------------- */
 
   const clearChatForMe = async (chatId) => {
@@ -184,11 +125,7 @@ const MessageWS = () => {
       });
 
       setChats((prev) => prev.filter((c) => c._id !== chatId));
-
-      socket?.emit("chat:cleared", {
-        chatId,
-        userId: user.id,
-      });
+      dispatch(resetChatUnread(chatId));
 
       toast.success("Chat cleared");
     } catch (error) {
@@ -210,17 +147,15 @@ const MessageWS = () => {
       if (data.success) {
         const chat = data.data;
         // Optimistically add to chats list if not already present
-        setChats((prev) => {
-          prev.some((c) => c._id === chat._id) ? prev : [chat, ...prev]
-        });
+        setChats((prev) => prev.some((c) => c._id === chat._id) ? prev : [chat, ...prev] );
 
         // Navigate to chat page
         navigate(`/messages/${chat._id}`);
       } else {
         toast.error(data.message);
       }
-    } catch (err) {
-      toast.error(err.message);
+    } catch (error) {
+      toast.error(error.message);
     }
   };
 
@@ -276,21 +211,16 @@ const MessageWS = () => {
         <div className="space-y-3">
           {filteredChats.map((chat) => {
             const otherUser = chat.otherUser;
+            const unreadCount = perChat[chat._id] || 0;
 
             return (
               <div
                 key={chat._id}
                 onClick={() => {
-                  setChats(prev =>
-                    prev.map(c =>
-                      c._id === chat._id
-                        ? { ...c, unreadMessages: 0 }
-                        : c
-                    )
-                  );
+                  dispatch(resetChatUnread(chat._id))
                   navigate(`/messages/${chat._id}`)
                 }}
-                className={`relative flex gap-4 p-4 ${chat.unreadMessages > 0 ? "bg-slate-50" : "bg-white"} rounded-md shadow cursor-pointer hover:bg-slate-100`}
+                className={`relative flex gap-4 p-4 ${unreadCount > 0 ? "bg-slate-50" : "bg-white"} rounded-md shadow cursor-pointer hover:bg-slate-100`}
               >
                 <img
                   src={otherUser?.profile_picture || "/default-avatar.png"}
@@ -299,15 +229,15 @@ const MessageWS = () => {
                 />
 
                 <div className="flex-1">
-                  <p className={`${chat.unreadMessages > 0 ? "font-semibold text-gray-900" : "font-medium text-gray-800"}`}>{otherUser?.full_name || "User Name"}</p>
+                  <p className={`${unreadCount > 0 ? "font-semibold text-gray-900" : "font-medium text-gray-800"}`}>{otherUser?.full_name || "User Name"}</p>
                   <p className="text-sm text-slate-500 truncate">
                     {chat.lastMessage?.text ? chat.lastMessage?.text : chat.lastMessage?.media ? "Media" : "Start a conversation"}
                   </p>
                 </div>
                 {/* 🔹 Unread badge */}
-                {chat.lastMessage?.status !== "read" && chat.unreadMessages > 0 && (
+                {unreadCount > 0 && (
                   <span className="absolute top-7 right-12 bg-gray-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                    {chat.unreadMessages}
+                    {unreadCount}
                   </span>
                 )}
 

@@ -6,6 +6,8 @@ import api from "../../api/axios.js";
 import Loading from "../../components/Loading.jsx";
 import formatTime from "../../utils/formatTime.js";
 import { useSocket } from "../../hooks/useSocket.js";
+import { useDispatch } from "react-redux";
+import { resetChatUnread } from "../../features/messagesWS/chatCountSlice.js";
 
 const ChatBox = () => {
   const { chatId } = useParams();
@@ -27,6 +29,7 @@ const ChatBox = () => {
 
 
   const socket = useSocket();
+  const dispatch = useDispatch();
   const joinedChatsRef = useRef(new Set());
 
   /* -------------------- FETCH INITIAL MESSAGES -------------------- */
@@ -124,6 +127,8 @@ const ChatBox = () => {
   useEffect(() => {
     if (!chatId || !socket || chats.length === 0) return;
 
+    dispatch(resetChatUnread(chatId));
+    
     socket.emit("read_messages", { chatId });
   }, [chatId, socket, chats.length]);
 
@@ -138,7 +143,6 @@ const ChatBox = () => {
   const sendMessage = async () => {
     if ((!text.trim() && !image && !editText.trim()) || !chatId || !user?._id) return;
     
-    // Are we editing?
     if (editingId) {
       // Optimistic UI update
       setChats((prev) =>
@@ -155,7 +159,7 @@ const ChatBox = () => {
 
       setEditingId(null);
       setEditText("");
-      return; // don't continue to send a new message
+      return;
     }
     
     const messageId = crypto.randomUUID();
