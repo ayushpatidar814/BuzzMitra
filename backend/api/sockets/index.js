@@ -5,6 +5,8 @@ import { chatSocketHandler } from "./chat.socket.js"; // (next step)
 
 let io;
 
+export const onlineUsers = new Map(); // userId → socketId
+
 export const initSocket = (server) => {
   io = new Server(server, {
     cors: {

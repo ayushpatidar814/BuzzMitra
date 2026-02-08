@@ -22,6 +22,9 @@ const ChatBox = () => {
   const [disabled, setDisabled] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [typingUsers, setTypingUsers] = useState({});
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+
 
   const socket = useSocket();
   const joinedChatsRef = useRef(new Set());
@@ -76,19 +79,84 @@ const ChatBox = () => {
       setTypingUsers((prev) => ({ ...prev, [chatId]: isTyping }));
     };
 
+    const handleMessageDeleted = ({ messageId }) => {
+      setChats((prev) => prev.filter((m) => m.messageId !== messageId));
+    };
+
+    const handleMessageEdited = ({ messageId, text }) => {
+      setChats((prev) =>
+        prev.map((m) =>
+          m.messageId === messageId ? { ...m, text, edited: true } : m
+        )
+      );
+    };
+
+    const handleDelivered = ({ messageId }) => {
+      setChats((prev) =>
+        prev.map((m) => m.messageId === messageId && m.status !== "read" ? { ...m, status: "delivered" } : m)
+      );
+    };
+
+    const handleRead = ({ messageId }) => {
+      setChats((prev) =>
+        prev.map((m) => (m.messageId === messageId ? { ...m, status: "read" } : m))
+      );
+    };
+
     socket.on("new_message", handleNewMessage);
     socket.on("typing", handleUserTyping);
+    socket.on("message_deleted", handleMessageDeleted);
+    socket.on("message_edited", handleMessageEdited);
+    socket.on("message_delivered", handleDelivered);
+    socket.on("message_read", handleRead);  
     
     return () => {
       socket.off("new_message", handleNewMessage);
       socket.off("typing", handleUserTyping);
+      socket.off("message_deleted", handleMessageDeleted);
+      socket.off("message_edited", handleMessageEdited);
+      socket.off("message_delivered", handleDelivered);
+      socket.off("message_read", handleRead);
     };
   }, [chatId, socket]);
+
+  /* -------------------- MARK MESSAGES AS READ -------------------- */
+  useEffect(() => {
+    if (!chatId || !socket || chats.length === 0) return;
+
+    socket.emit("read_messages", { chatId });
+  }, [chatId, socket, chats.length]);
+
+  useEffect(() => {
+    if (!socket || !myUserId) return;
+    socket.emit("join_user", myUserId);
+  }, [socket, myUserId]);
+
 
 
 /* -------------------- SEND MESSAGE -------------------- */
   const sendMessage = async () => {
-    if ((!text.trim() && !image) || !chatId || !user?._id) return;
+    if ((!text.trim() && !image && !editText.trim()) || !chatId || !user?._id) return;
+    
+    // Are we editing?
+    if (editingId) {
+      // Optimistic UI update
+      setChats((prev) =>
+        prev.map((m) =>
+          m.messageId === editingId ? { ...m, text: editText, edited: true } : m
+        )
+      );
+
+      socket.emit("edit_message", {
+        chatId,
+        messageId: editingId,
+        text: editText,
+      });
+
+      setEditingId(null);
+      setEditText("");
+      return; // don't continue to send a new message
+    }
     
     const messageId = crypto.randomUUID();
     setDisabled(true);
@@ -123,7 +191,7 @@ const ChatBox = () => {
       };
 
       // Optimistic UI update
-      setChats((prev) => [...prev, { ...payload, senderId: myUserId, createdAt: new Date().toISOString() }]);
+      setChats((prev) => [...prev, { ...payload, senderId: myUserId, status: "sent", createdAt: new Date().toISOString() }]);
       
       // Emit message over socket
       socket.connected && socket.emit("send_message", payload);
@@ -136,6 +204,30 @@ const ChatBox = () => {
     } finally {
       setDisabled(false);
     }
+  };
+
+
+  const startEdit = (message) => {
+    setEditingId(message.messageId);
+    setEditText(message.text);
+    setOpenMenuId(null);
+  };
+
+  const deleteMessage = (messageId) => {
+    // optimistic UI
+    setChats((prev) => prev.filter((m) => m.messageId !== messageId));
+    setOpenMenuId(null);
+
+    socket.emit("delete_message", {
+      chatId,
+      messageId,
+    });
+  };
+
+  const copyMessage = (text) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setOpenMenuId(null);
   };
 
  
@@ -184,7 +276,7 @@ const ChatBox = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      setOpenMenuId(openMenuId === message._messageId ? null : message.messageId)
+                      setOpenMenuId(openMenuId === message.messageId ? null : message.messageId)
                     }
                     }
                     className={`absolute top-1 ${
@@ -203,16 +295,16 @@ const ChatBox = () => {
                     >
                       {isSender ? (
                         <>
-                          <button onClick={editMessage} className="block w-full px-3 py-2 hover:bg-gray-100 text-left">
+                          <button onClick={() => startEdit(message)} className="block w-full px-3 py-2 hover:bg-gray-100 text-left">
                             Edit
                           </button>
-                          <button onClick={deleteMessage} className="block w-full px-3 py-2 hover:bg-gray-100 text-left text-red-500">
+                          <button onClick={() => deleteMessage(message.messageId)} className="block w-full px-3 py-2 hover:bg-gray-100 text-left text-red-500">
                             Delete
                           </button>
                         </>
                       ) : (
                         <>
-                          <button className="block w-full px-3 py-2 hover:bg-gray-100 text-left">
+                          <button onClick={() => copyMessage(message.text)} className="block w-full px-3 py-2 hover:bg-gray-100 text-left">
                             Copy
                           </button>
                           <button className="block w-full px-3 py-2 hover:bg-gray-100 text-left text-red-500">
@@ -239,10 +331,28 @@ const ChatBox = () => {
                   {/* TEXT */}
                   {message.text && <p>{message.text}</p>}
 
+
                   {/* TIME */}
                   <div className="text-[11px] text-gray-400 text-right mt-1">
                     {formatTime(message.createdAt)}
+                  
+                  {message.edited && (
+                    <span className="ml-1">edited</span>
+                  )}
+
+                  {/* Status (only for sender) */}
+                  {isSender && (
+                    <span className="ml-1 text-gray-400">
+                      {message.status === "read"
+                        ? <span className="text-blue-400">✓✓</span>
+                        : message.status === "delivered"
+                        ? "✓✓"
+                        : "✓"}
+                    </span>
+                  )}
+
                   </div>
+
                 </div>
               </div>
               </div>
@@ -252,6 +362,7 @@ const ChatBox = () => {
           <div id="chat-end" />
         </div>
       </div>
+
 
       {preview && (
         <div className="max-w-xl mx-auto mb-2 px-4">
@@ -285,15 +396,17 @@ const ChatBox = () => {
             type="text"
             className="flex-1 outline-none"
             placeholder="Type a message..."
-            value={text}
+            value={editingId ? editText : text}
             onChange={(e) => {
-              setText(e.target.value)
+              if (editingId) setEditText(e.target.value);
+              else setText(e.target.value);
+              
               socket.emit("typing", { chatId, isTyping: true });
 
               clearTimeout(window.__typingTimeout);
               window.__typingTimeout = setTimeout(() => {
                 socket.emit("typing", { chatId, isTyping: false });
-              }, 1000);
+              }, 1500);
             }}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
           />

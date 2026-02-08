@@ -3,7 +3,7 @@ import Chat from "../models/Chat.js";
 import MessageWS from "../models/MessageWS.js";
 import imagekit from "../configs/imagekit.js";
 import User from "../models/User.js";
-import fs from 'fs';
+import fs from 'fs/promises';
 
 const uploadMedia = async (req, res) => {
   try {
@@ -18,7 +18,7 @@ const uploadMedia = async (req, res) => {
     let media = null;
 
     if (file) {
-      const buffer = await fs.readFileSync(file.path);
+      const buffer = await fs.readFile(file.path);
 
       const uploadRes = await imagekit.upload({
         file: buffer,
@@ -63,7 +63,8 @@ const getChats = async (req, res) => {
       isGroup: false,
     })
       .populate("lastMessage")
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean();
 
     // extract other user ids
     const otherUserIds = chats.map(chat =>
@@ -74,7 +75,7 @@ const getChats = async (req, res) => {
     const users = await User.find(
       { _id: { $in: otherUserIds } },
       "full_name username profile_picture"
-    );
+    ).lean();
 
     // map users by id
     const userMap = {};
@@ -82,19 +83,52 @@ const getChats = async (req, res) => {
       userMap[u._id] = u;
     });
 
+    const unreadData = await MessageWS.aggregate([
+      { $match: { receiverId: userId, status: { $ne: "read" } } },
+      { $group: { _id: "$chatId", unreadMessages: { $sum: 1 } } }
+    ]);
+
+    const unreadMap = {};
+    unreadData.forEach(u => {
+      unreadMap[u._id.toString()] = u.unreadMessages;
+    });
+
+    const unreadChatsCount = unreadData.length;
+    const totalUnreadMessages = unreadData.reduce(
+      (acc, u) => acc + u.unreadMessages,
+      0
+    );
+
     // build final response
     const formattedChats = chats.map(chat => {
       const otherUserId = chat.participants.find(id => id !== userId);
 
+      const clearedAt = chat.clearedBy?.find(
+        c => c.userId === userId
+      )?.clearedAt;
+
+      let lastMessage = null;
+
+      if (
+        chat.lastMessage &&
+        (!clearedAt || chat.lastMessage.createdAt > clearedAt)
+      ) {
+        lastMessage = {
+          ...chat.lastMessage,
+          status: chat.lastMessage.status || "sent",
+        };
+      }
+
       return {
         _id: chat._id,
         otherUser: userMap[otherUserId],
-        lastMessage: chat.lastMessage,
+        lastMessage,
+        unreadMessages: clearedAt ? 0 : unreadMap[chat._id.toString()] || 0,
         updatedAt: chat.updatedAt,
       };
-    });
+    }).filter(chat => chat.lastMessage !== null);
 
-    res.json({ success: true, data: formattedChats });
+    res.json({ success: true, data: formattedChats, unreadChatsCount, totalUnreadMessages, });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -102,18 +136,33 @@ const getChats = async (req, res) => {
 
 const getMessages = async (req, res) => {
   try {
-    const { chatId } = req.params;
     const { userId } = req.auth();
+    const { chatId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
       return res.json({ success: false, message: "Invalid chatId" });
     }
 
     // fetch chat
-    const chat = await Chat.findById(chatId);
+    const chat = await Chat.findById(chatId).lean();
     if (!chat || !chat.participants.includes(userId)) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
+
+    const clearedAt = chat?.clearedBy?.find(
+      c => c.userId === userId
+    )?.clearedAt;
+
+    const query = {
+      chatId,
+      ...(clearedAt && { createdAt: { $gt: clearedAt } })
+    };
+
+    const messages = await MessageWS
+      .find(query)
+      .sort({ createdAt: 1 })
+      .limit(50)
+      .lean();
 
     // find receiver id
     const receiverId = chat.participants.find(
@@ -124,15 +173,7 @@ const getMessages = async (req, res) => {
     const receiver = await User.findById(
       receiverId,
       "full_name username profile_picture"
-    );
-
-    // fetch messages
-    const messages = await MessageWS.find({
-      chatId,
-      deletedAt: null,
-    })
-      .sort({ createdAt: 1 }) // oldest → newest (better for UI)
-      .limit(50);
+    ).lean();
 
     res.json({
       success: true,
@@ -150,132 +191,6 @@ const getMessages = async (req, res) => {
   }
 };
 
-
-const deleteMessage = async (req, res) => {
-  try {
-    const { userId } = req.auth();
-    const { messageId } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(messageId)) {
-      return res.json({ success: false, message: "Invalid messageId" });
-    }
-
-    const message = await MessageWS.findById(messageId);
-    if (!message) {
-      return res.status(404).json({ success: false, message: "Message not found" });
-    }
-
-    if (message.senderId !== userId) {
-      return res.status(403).json({ success: false, message: "Not allowed" });
-    }
-
-    if (message.deletedAt) {
-      return res.json({ success: true });
-    }
-
-    message.deletedAt = new Date();
-    message.text = "";
-    message.mediaUrl = "";
-
-    await message.save();
-
-    res.json({ success: true, message: "Message deleted" });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-const editMessage = async (req, res) => {
-  try {
-    const { userId } = req.auth();
-    const { messageId } = req.params;
-    const { text } = req.body;
-
-    if (!text?.trim()) {
-      return res.json({ success: false, message: "Text required" });
-    }
-
-    const message = await MessageWS.findById(messageId);
-
-    if (!message || message.deletedAt) {
-      return res.status(404).json({ success: false, message: "Message not found" });
-    }
-
-    if (message.senderId !== userId) {
-      return res.status(403).json({ success: false, message: "Not allowed" });
-    }
-
-    // Optional: 60-minute edit limit
-    const SIXTY_MIN = 60 * 60 * 1000;
-    if (Date.now() - message.createdAt > SIXTY_MIN) {
-      return res.status(400).json({ success: false, message: "Edit window expired" });
-    }
-    
-    message.text = text;
-    message.editedAt = new Date();
-    await message.save();
-    
-    res.json({ success: true, message: "Message edited" });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-const markAsRead = async (req, res) => {
-  try {
-    const { userId } = req.auth();
-    const { chatId } = req.params;
-
-    const messages = await MessageWS.find({
-      chatId, 
-      senderId: { $ne: userId},
-    }).select("_id")
-
-    const messageIds = messages.map(m => m.messageId)
-
-    const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(userId)) {
-      return res.status(403).json({ success: false });
-    }
-
-    await MessageStatus.updateMany(
-      { messageId: { $in: messageIds }, userId },
-      { $set: { status: "read" } }
-    );
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-const sendTyping = async (req, res) => {
-  try {
-    const { userId } = req.auth();
-    const { chatId, isTyping } = req.body;
-
-    if(!chatId){
-      return res.json({success: false, message: "Chat Id is required."})
-    }
-
-    const chat = await Chat.findById(chatId);
-    if (!chat || !chat.participants.includes(userId)) {
-      return res.json({ success: false });
-    }
-
-    // emit via socket.io 
-    req.io.to(chatId).emit("user-typing", {
-      chatId,
-      userId,
-      isTyping: Boolean(isTyping)
-    });
-    
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false });
-  }
-};
-
 const getOrCreateChat = async (req, res) => {
   try {
     const { userId } = req.auth();
@@ -289,14 +204,13 @@ const getOrCreateChat = async (req, res) => {
       return res.json({ success: false, message: "Cannot chat with yourself" });
     }
 
-    const user = await User.findById(receiverId).select("fullName username avatar")
+    const user = await User.findById(receiverId).select("fullName username avatar").lean();
     const participants = [userId, receiverId].sort();
 
     // 1️⃣ Try to find existing chat
     let chat = await Chat.findOne({
       isGroup: false,
       participants,
-
     });
 
     // 2️⃣ If not found, create new chat
@@ -314,5 +228,44 @@ const getOrCreateChat = async (req, res) => {
   }
 };
 
+const clearChatForMe = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+    const { chatId } = req.params;
+  
+    if (!mongoose.Types.ObjectId.isValid(chatId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid chatId",
+        });
+    }
+  
+    await Chat.updateOne(
+      { _id: chatId },
+      {
+        $pull: { clearedBy: { userId } },
+      }
+    );
 
-export { uploadMedia, getChats, getMessages, deleteMessage, markAsRead, editMessage, sendTyping, getOrCreateChat }
+    await Chat.updateOne(
+      { _id: chatId },
+      {
+        $push: {
+          clearedBy: {
+            userId,
+            clearedAt: new Date(),
+          },
+        },
+      }
+    );
+  
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.log(error)
+    res.json({success: false, message: error.message})
+  }
+};
+
+
+
+export { uploadMedia, getChats, getMessages, getOrCreateChat, clearChatForMe }

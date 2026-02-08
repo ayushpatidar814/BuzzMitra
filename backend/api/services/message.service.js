@@ -10,7 +10,7 @@ export const saveMessage = async (data) => {
 
   const chat = await Chat.findOneAndUpdate(
     { participants },
-    { $setOnInsert: { participants } },
+    { $setOnInsert: { participants }, $inc: { unreadMessages: 1 } },
     { new: true, upsert: true }
   );
 
@@ -21,6 +21,12 @@ export const saveMessage = async (data) => {
 
   await Chat.findByIdAndUpdate(chat._id, {
     lastMessage: message._id
+  });
+
+  /* 🔴 count unread chats */
+  const unreadChatsCount = await Chat.countDocuments({
+    participants: data.receiverId,
+    unreadMessages: { $gt: 0 }
   });
 
   return message;

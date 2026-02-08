@@ -2,9 +2,8 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { getChats } from "../../api/chat.api";
 
 const initialState = {
-  list: [],               // all chats
-  activeChatId: null,     // currently opened chat
-  loading: false,
+  chats: [],
+  unreadChatsCount: 0,
 };
 
 export const fetchChats = createAsyncThunk(

@@ -60,11 +60,13 @@ const messageWSSchema = new mongoose.Schema({
     unique: true,
     index: true,
   },
-  
-  deletedAt: {
-    type: Date,
-    default: null,
-  }
+
+  status: {
+    type: String,
+    enum: ["sent", "delivered", "read"],
+    default: "sent",
+    index: true,
+  },
 
 }, { timestamps: true });
 
