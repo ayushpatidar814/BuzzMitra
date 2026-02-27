@@ -1,14 +1,15 @@
 import 'dotenv/config';
+import fs from 'fs';
 import { Kafka, logLevel } from "kafkajs";
 
 const kafka = new Kafka({
   clientId: process.env.KAFKA_CLIENT_ID || "buzzmitra-backend",
   brokers: process.env.KAFKA_BROKERS.split(","),
-  ssl: true,
-  sasl: {
-    mechanism: "scram-sha-512", // Redpanda config
-    username: process.env.KAFKA_USERNAME,
-    password: process.env.KAFKA_PASSWORD,
+  ssl: {
+    rejectUnauthorized: true,
+    ca: [fs.readFileSync('./api/ca.pem', 'utf-8')],
+    cert: fs.readFileSync('./api/service.cert', 'utf-8'),
+    key: fs.readFileSync('./api/service.key', 'utf-8'),
   },
 
   retry: {
