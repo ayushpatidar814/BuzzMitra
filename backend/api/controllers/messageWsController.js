@@ -15,6 +15,19 @@ const uploadMedia = async (req, res) => {
       return res.json({success: false, message: "Media can not be empty"})
     }
 
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png', 
+      'image/gif',
+      'image/webp',
+      'image/bmp'
+    ];
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      fs.unlink(file.path, () => {});
+      return res.status(400).json({ success: false, message: "Only image files are allowed" });
+    }
+
     let media = null;
 
     if (file) {

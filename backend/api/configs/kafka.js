@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import fs from 'fs';
 import { Kafka, logLevel } from "kafkajs";
 
 const kafka = new Kafka({
@@ -7,9 +6,9 @@ const kafka = new Kafka({
   brokers: process.env.KAFKA_BROKERS.split(","),
   ssl: {
     rejectUnauthorized: true,
-    ca: [fs.readFileSync('./api/ca.pem', 'utf-8')],
-    cert: fs.readFileSync('./api/service.cert', 'utf-8'),
-    key: fs.readFileSync('./api/service.key', 'utf-8'),
+    ca: [process.env.KAFKA_CA_CERT.replace(/\\n/g, '\n')],
+    cert: process.env.KAFKA_SERV_CERT.replace(/\\n/g, '\n'),
+    key: process.env.KAFKA_KEY_CERT.replace(/\\n/g, '\n'),
   },
 
   retry: {

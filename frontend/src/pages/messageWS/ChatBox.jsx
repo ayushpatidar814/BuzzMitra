@@ -8,6 +8,7 @@ import formatTime from "../../utils/formatTime.js";
 import { useSocket } from "../../hooks/useSocket.js";
 import { useDispatch } from "react-redux";
 import { resetChatUnread } from "../../features/messagesWS/chatCountSlice.js";
+import toast from 'react-hot-toast';
 
 const ChatBox = () => {
   const { chatId } = useParams();
@@ -171,6 +172,20 @@ const ChatBox = () => {
     
       if (image) {
         const token = await getToken();
+
+        const allowedMimeTypes = [
+          'image/jpeg', // Covers both jpeg and jpg
+          'image/png',
+          'image/webp'
+        ];
+          
+        if (!allowedMimeTypes.includes(image.type)) {
+          setPreview(null);
+          setImage(null);
+          toast("Only images are allowed");
+          return;
+        }
+
         const formData = new FormData();
         formData.append("media", image);
 
@@ -328,7 +343,7 @@ const ChatBox = () => {
                     <img
                       src={message.media.url}
                       alt="media"
-                      className="w-full max-w-xs rounded-lg mb-1"
+                      className="w-48 h-48 object-cover rounded-lg mb-1"
                     />
                   )}
 
@@ -423,6 +438,14 @@ const ChatBox = () => {
               onChange={(e) => {
                 const file = e.target.files[0];
                 if (!file) return;
+
+                const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
+
+                if (!allowedImageTypes.includes(file.type)) {
+                  toast("Only images are allowed");
+                  return;
+                }
+                
                 setImage(file);
                 setPreview(URL.createObjectURL(file));
               }}
