@@ -20,16 +20,21 @@ const chatSchema = new mongoose.Schema(
       ref: "MessageWS" 
     },
     clearedBy: [
-    {
-      userId: {
-        type: String,
-        index: true
-      },
-      clearedAt: {
-        type: Date
+      {
+        userId: {
+          type: String,
+          index: true
+        },
+        clearedAt: {
+          type: Date
+        }
       }
-    }
-  ],
+    ],
+    unreadCount: {
+      type: Map,
+      of: Number,
+      default: {}
+    },
   },
   { timestamps: true }
 );

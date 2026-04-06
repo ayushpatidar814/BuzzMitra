@@ -6,17 +6,15 @@ import Connections from "./pages/Connections";
 import Discover from "./pages/Discover";
 import Profile from "./pages/Profile";
 import CreatePost from "./pages/CreatePost";
-import { useAuth } from "@clerk/clerk-react";
 import Layout from "./pages/Layout";
+import MessageWS from "./pages/messageWS/MessageWS";
+import ChatBox from "./pages/messageWS/ChatBox";
+import SocketProvider from "./socket/SocketProvider";
+import { useAuth } from "@clerk/clerk-react";
 import { Toaster } from "react-hot-toast";
 import { useDispatch } from "react-redux";
 import { fetchUser } from "./features/user/userSlice";
 import { fetchConnections } from "./features/connections/connectionsSlice";
-// import { addMessage } from './features/messages/messagesSlice'
-// import Notification from './components/Notification'
-import MessageWS from "./pages/messageWS/MessageWS";
-import ChatBox from "./pages/messageWS/ChatBox";
-import SocketProvider from "./socket/SocketProvider";
 
 const App = () => {
   const { getToken, isSignedIn } = useAuth();
@@ -40,26 +38,6 @@ const App = () => {
     pathnameRef.current = pathname;
   }, [pathname]);
 
-  // useEffect(()=>{
-  //   if(user){
-  //     const eventSource = new EventSource(import.meta.env.VITE_BASEURL + '/api/message/' + user.id);
-  //     eventSource.onmessage = (event)=>{
-  //       const message = JSON.parse(event.data)
-
-  //       if(pathnameRef.current === ('/messages/' + message.from_user_id._id)){
-  //         dispatch(addMessage(message))
-  //       } else{
-  //         toast.custom((t)=>(
-  //           <Notification t={t} message={message} />
-  //         ), {position: 'bottom-right'})
-  //       }
-  //     }
-  //     return ()=>{
-  //       eventSource.close()
-  //     }
-  //   }
-  // },[user, dispatch])
-
   return (
     <>
       <Toaster />
@@ -67,8 +45,6 @@ const App = () => {
         <Routes>
           <Route path="/" element={!isSignedIn ? <Login /> : <Layout />}>
             <Route index element={<Feed />} />
-            {/* <Route path='messages' element={<Message />} />
-            <Route path='messages/:userId' element={<ChatBox />} /> */}
             <Route path="connections" element={<Connections />} />
             <Route path="discover" element={<Discover />} />
             <Route path="profile" element={<Profile />} />

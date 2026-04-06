@@ -3,7 +3,7 @@ import User from "../models/User.js";
 import Connection from "../models/Connection.js";
 import sendEmail from "../configs/nodeMailer.js";
 import Story from "../models/Story.js";
-import Message from "../models/Message.js";
+import MessageWS from "../models/MessageWS.js";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "buzzmitra-app" });
@@ -139,7 +139,7 @@ const sendNotificationOfUnseenMessages = inngest.createFunction(
   { id: "send-unseen-messages-notification" },
   { cron: "TZ=America/New_York 0 9 * * *" }, //Everyday at 9 AM
   async ({ step }) => {
-    const messages = await Message.find({ seen: false }).populate("to_user_id");
+    const messages = await MessageWS.find({ status: "sent" }).populate("to_user_id");
     const unseenCount = {};
 
     messages.map((message) => {

@@ -5,7 +5,8 @@ import imagekit from "../configs/imagekit.js";
 import User from "../models/User.js";
 import fs from 'fs/promises';
 
-const uploadMedia = async (req, res) => {
+const uploadMedia = async (req, res) => { 
+
   try {
     const { userId } = req.auth();
 
@@ -96,24 +97,18 @@ const getChats = async (req, res) => {
       userMap[u._id] = u;
     });
 
-    const unreadData = await MessageWS.aggregate([
-      { $match: { receiverId: userId, status: { $ne: "read" } } },
-      { $group: { _id: "$chatId", unreadMessages: { $sum: 1 } } }
-    ]);
+    const unreadChatsCount = chats.filter(
+      chat => (chat.unreadCount?.[userId] || 0) > 0
+    ).length;
 
-    const unreadMap = {};
-    unreadData.forEach(u => {
-      unreadMap[u._id.toString()] = u.unreadMessages;
-    });
-
-    const unreadChatsCount = unreadData.length;
-    const totalUnreadMessages = unreadData.reduce(
-      (acc, u) => acc + u.unreadMessages,
+    const totalUnreadMessages = chats.reduce(
+      (acc, chat) => acc + (chat.unreadCount?.[userId] || 0),
       0
     );
 
     // build final response
     const formattedChats = chats.map(chat => {
+      const unreadMessages = chat.unreadCount?.[userId] || 0;
       const otherUserId = chat.participants.find(id => id !== userId);
 
       const clearedAt = chat.clearedBy?.find(
@@ -136,7 +131,7 @@ const getChats = async (req, res) => {
         _id: chat._id,
         otherUser: userMap[otherUserId],
         lastMessage,
-        unreadMessages: clearedAt ? 0 : unreadMap[chat._id.toString()] || 0,
+        unreadMessages,
         updatedAt: chat.updatedAt,
       };
     }).filter(chat => chat.lastMessage !== null);
@@ -161,6 +156,11 @@ const getMessages = async (req, res) => {
     if (!chat || !chat.participants.includes(userId)) {
       return res.status(403).json({ success: false, message: "Access denied" });
     }
+
+    await Chat.updateOne(
+      { _id: chatId },
+      { $set: { [`unreadCount.${userId}`]: 0 } }
+    );
 
     const clearedAt = chat?.clearedBy?.find(
       c => c.userId === userId
@@ -217,7 +217,7 @@ const getOrCreateChat = async (req, res) => {
       return res.json({ success: false, message: "Cannot chat with yourself" });
     }
 
-    const user = await User.findById(receiverId).select("fullName username avatar").lean();
+    const user = await User.findById(receiverId).select("full_name username profile_picture").lean();
     const participants = [userId, receiverId].sort();
 
     // 1️⃣ Try to find existing chat
@@ -279,6 +279,88 @@ const clearChatForMe = async (req, res) => {
   }
 };
 
+const getRecentChats = async (req, res) => {
+  try {
+    const { userId } = req.auth();
+
+    const chats = await Chat.find({
+      participants: userId,
+      isGroup: false,
+    })
+      .populate("lastMessage")
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .lean();
+
+    // extract other user ids
+    const otherUserIds = chats.map(chat =>
+      chat.participants.find(id => id !== userId)
+    );
+
+    // fetch user profiles
+    const users = await User.find(
+      { _id: { $in: otherUserIds } },
+      "full_name username profile_picture"
+    ).lean();
+
+    // map users by id
+    const userMap = {};
+    users.forEach(u => {
+      userMap[u._id] = u;
+    });
+
+    const unreadChatsCount = chats.filter(
+      chat => (chat.unreadCount?.[userId] || 0) > 0
+    ).length;
+
+    const totalUnreadMessages = chats.reduce(
+      (acc, chat) => acc + (chat.unreadCount?.[userId] || 0),
+      0
+    );
 
 
-export { uploadMedia, getChats, getMessages, getOrCreateChat, clearChatForMe }
+    // build final response
+    const formattedChats = chats.map(chat => {
+      const unreadMessages = chat.unreadCount?.[userId] || 0;
+      const otherUserId = chat.participants.find(id => id !== userId);
+
+      const clearedAt = chat.clearedBy?.find(
+        c => c.userId === userId
+      )?.clearedAt;
+
+      let lastMessage = null;
+
+      if (
+        chat.lastMessage &&
+        (!clearedAt || chat.lastMessage.createdAt > clearedAt)
+      ) {
+        lastMessage = {
+          ...chat.lastMessage,
+          status: chat.lastMessage.status || "sent",
+        };
+      }
+
+      return {
+        _id: chat._id,
+        otherUser: userMap[otherUserId],
+        lastMessage,
+        unreadMessages,
+        updatedAt: chat.updatedAt,
+      };
+    }).filter(chat => chat.lastMessage !== null);
+
+
+    res.json({
+      success: true,
+      data: formattedChats,
+      message: "Recent chats fetched successfully"
+    });
+  } catch (error) {
+    console.log(error);
+    res.json({success: false, message: error.message})
+  }
+};
+
+
+
+export { uploadMedia, getChats, getMessages, getOrCreateChat, clearChatForMe, getRecentChats }

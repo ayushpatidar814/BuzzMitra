@@ -15,7 +15,6 @@ import { startConsumer } from './kafka/consumer.js';
 import userRouter from './routes/userRoutes.js';
 import postRouter from './routes/postRoutes.js';
 import storyRouter from './routes/storyRoutes.js';
-import messageRouter from './routes/messageRoutes.js';
 import chatRouter from './routes/chatRoutes.js';
 import { createTopics } from './kafka/createTopics.js';
 
@@ -51,7 +50,6 @@ app.use('/api/inngest', serve({ client: inngest, functions }));
 app.use('/api/user', userRouter);
 app.use('/api/post', postRouter);
 app.use('/api/story', storyRouter);
-app.use('/api/message', messageRouter);
 app.use('/api/chat', chatRouter);
 
 /* ---------------- BOOTSTRAP ---------------- */
@@ -62,7 +60,6 @@ const startServer = async () => {
     await createTopics();
 
     const server = http.createServer(app);
-
     const io = initSocket(server);
 
     await connectProducer();

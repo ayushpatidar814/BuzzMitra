@@ -1,5 +1,5 @@
 import { kafkaConsumer } from "../configs/kafka.js";
-import MessageWS from "../models/MessageWS.js";
+import Chat from "../models/Chat.js";
 import { saveMessage } from "../services/message.service.js";
 import { onlineUsers } from "../sockets/index.js";
 
@@ -28,6 +28,7 @@ export const startConsumer = async (io) => {
         
         const saved = await saveMessage(payload);
         if(!saved) return;
+
         
         // ChatBox (open chat)
         io.to(saved.chatId.toString()).emit("new_message", saved);
@@ -36,24 +37,15 @@ export const startConsumer = async (io) => {
         io.to(`user:${saved.receiverId}`).emit("inbox_message", saved);
         io.to(`user:${saved.senderId}`).emit("inbox_message", saved);
         
-        const receiverSocketId = onlineUsers.get(saved.receiverId); // Clerk ID
-        if (receiverSocketId) {
-          // update DB
-          await MessageWS.updateOne(
-            { messageId: saved.messageId },
-            { $set: { status: "delivered" } }
-          );
-          
-          // notify sender ONLY
-          io.to(`user:${saved.senderId}`).emit("message_delivered", {
-            messageId: saved.messageId,
-          });
+        // 🔥 Emit updated unread chat count (if online)
+        if (onlineUsers.has(saved.receiverId)) {
+          const chats = await Chat.find({
+            participants: saved.receiverId,
+          }).lean();
 
-          // 🔔 Emit unread chats count to receiver
-          const unreadChatsCount = await MessageWS.distinct("chatId", {
-            receiverId: saved.receiverId,
-            status: { $ne: "read" },
-          }).then(chats => chats.length);
+          const unreadChatsCount = chats.filter(
+            (c) => (c.unreadCount?.[saved.receiverId] || 0) > 0
+          ).length;
 
           io.to(`user:${saved.receiverId}`).emit("unread_chats_count", {
             count: unreadChatsCount,

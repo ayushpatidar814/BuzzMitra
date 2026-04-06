@@ -46,6 +46,8 @@ const ChatBox = () => {
         if (data.success) {
           setChats(data.data.messages || []);
           setUser(data.data.receiver);
+
+          dispatch(resetChatUnread(chatId));
         }
       } catch (err) {
         console.error(err);

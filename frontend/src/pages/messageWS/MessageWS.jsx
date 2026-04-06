@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MessageSquare, Search, MoreVertical } from "lucide-react";
 import { useAuth, useUser } from "@clerk/clerk-react";
+import { useDispatch, useSelector } from "react-redux";
 
+import { resetChatUnread, setInitialCounts } from "../../features/messagesWS/chatCountSlice";
+import { useSocket } from "../../hooks/useSocket";
 import api from "../../api/axios";
 import toast from "react-hot-toast";
 import Loading from "../../components/Loading";
-import { useDispatch, useSelector } from "react-redux";
-import { resetChatUnread } from "../../features/messagesWS/chatCountSlice";
-import { useSocket } from "../../hooks/useSocket";
 
 
 const MessageWS = () => {
@@ -43,6 +43,7 @@ const MessageWS = () => {
 
       if (data.success) {
         setChats(data.data);
+        dispatch(setInitialCounts(data.data));
       } else {
         toast.error(data.message);
       }
@@ -58,12 +59,12 @@ const MessageWS = () => {
   }, []);
 
 
-
   /* ---------------- socket: inbox messages ---------------- */
   useEffect(() => {
     if (!socket || !user?.id) return;
 
     const handleInboxMessage = (message) => {
+
       setChats((prev) => {
         const index = prev.findIndex((c) => c._id === message.chatId);
 

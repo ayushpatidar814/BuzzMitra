@@ -42,7 +42,7 @@ const messageWSSchema = new mongoose.Schema({
     },        
     thumbnail: {
       type: String,
-      defult: "",
+      default: "",
     }, // for video/image preview
     size: {
       type: Number,

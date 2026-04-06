@@ -1,6 +1,8 @@
 // sockets/chat.socket.js
-import { sendMessageToKafka } from "../kafka/producer.js";
+// import { sendMessageToKafka } from "../kafka/producer.js";
+import Chat from "../models/Chat.js";
 import MessageWS from '../models/MessageWS.js';
+import { saveMessage } from "../services/message.service.js";
 import { onlineUsers } from "./index.js";
 
 export const chatSocketHandler = (io, socket) => {
@@ -18,11 +20,12 @@ export const chatSocketHandler = (io, socket) => {
     socket.join(`user:${userId}`);
     console.log(`👤 User ${userId} joined user room`);
 
-    // ✅ SEND INITIAL UNREAD CHAT COUNT
-    const unreadChatsCount = await MessageWS.distinct("chatId", {
-      receiverId: userId,
-      status: { $ne: "read" },
-    }).then(chats => chats.length);
+    // 🔥 Send unread count from DB
+    const chats = await Chat.find({ participants: userId }).lean();
+
+    const unreadChatsCount = chats.filter(
+      (c) => (c.unreadCount?.[userId] || 0) > 0
+    ).length;
 
     io.to(`user:${userId}`).emit("unread_chats_count", {
       count: unreadChatsCount,
@@ -75,7 +78,8 @@ export const chatSocketHandler = (io, socket) => {
         createdAt: new Date().toISOString(),
       };
 
-      await sendMessageToKafka(message);
+      // await sendMessageToKafka(message);
+      await saveMessage(message);
 
     } catch (err) {
       console.error(err);
@@ -110,28 +114,25 @@ export const chatSocketHandler = (io, socket) => {
   socket.on("read_messages", async ({ chatId }) => {
     if (!chatId) return;
 
-    const messages = await MessageWS.find({
-      chatId,
-      receiverId: socket.user.id,
-      status: { $ne: "read" }
-    });
-
     await MessageWS.updateMany(
-      { _id: { $in: messages.map(m => m._id) } },
+      { chatId, receiverId: socket.user.id },
       { status: "read" }
     );
 
-    messages.forEach(m => {
-      io.to(`user:${m.senderId}`).emit("message_read", {
-        messageId: m.messageId
-      });
-    });
+    // 🔥 Reset unread count in DB
+    await Chat.updateOne(
+      { _id: chatId },
+      { $set: { [`unreadCount.${socket.user.id}`]: 0 } }
+    );
 
-    // 🔄 update unread chat count
-    const unreadChatsCount = await MessageWS.distinct("chatId", {
-      receiverId: socket.user.id,
-      status: { $ne: "read" },
-    }).then(chats => chats.length);
+    // Emit updated unread count
+    const chats = await Chat.find({
+      participants: socket.user.id,
+    }).lean();
+
+    const unreadChatsCount = chats.filter(
+      (c) => (c.unreadCount?.[socket.user.id] || 0) > 0
+    ).length;
 
     io.to(`user:${socket.user.id}`).emit("unread_chats_count", {
       count: unreadChatsCount,

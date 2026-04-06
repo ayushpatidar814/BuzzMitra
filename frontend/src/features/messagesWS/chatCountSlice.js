@@ -11,6 +11,25 @@ const chatCountSlice = createSlice({
   name: "chatCount",
   initialState,
   reducers: {
+
+    /* 🔄 Hydrate from backend */
+    setInitialCounts(state, action) {
+      const chats = action.payload || [];
+
+      const perChat = {};
+      let total = 0;
+
+      chats.forEach(chat => {
+        if (chat.unreadMessages > 0) {
+          perChat[chat._id] = chat.unreadMessages;
+          total += chat.unreadMessages;
+        }
+      });
+
+      state.perChat = perChat;
+      state.totalUnread = total;
+    },
+
     /* 🔔 Incoming message */
     incrementUnread(state, action) {
       const chatId = action.payload;
@@ -29,17 +48,6 @@ const chatCountSlice = createSlice({
 
       state.totalUnread = Math.max(0, state.totalUnread - count);
       delete state.perChat[chatId];
-    },
-
-    /* 🔄 Initial load from backend */
-    setInitialCounts(state, action) {
-      const perChat = action.payload?.perChat || {};
-
-      state.perChat = perChat;
-      state.totalUnread = Object.values(perChat).reduce(
-        (sum, count) => sum + count,
-        0
-      );
     },
 
     /* 🚪 Logout / hard reset */
