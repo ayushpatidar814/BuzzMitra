@@ -1,4 +1,5 @@
-import { verifyToken } from "@clerk/backend";
+import User from "../models/User.js";
+import { verifyAuthToken } from "../utils/auth.js";
 
 export const socketAuthMiddleware = async (socket, next) => {
   try {
@@ -8,17 +9,17 @@ export const socketAuthMiddleware = async (socket, next) => {
 
     if (!token) throw new Error("No token provided");
 
-    const payload = await verifyToken(token, {
-      secretKey: process.env.CLERK_SECRET_KEY,
-    });
+    const payload = verifyAuthToken(token);
+    const user = await User.findById(payload.sub).select("_id");
+    if (!user) throw new Error("Invalid token");
 
     socket.user = {
-      id: payload.sub, // Clerk userId
+      id: String(user._id),
     };
 
     next();
   } catch (err) {
-    console.error("🔐 Socket auth failed:", err.message);
+    console.error("Socket auth failed:", err.message);
     next(new Error("Invalid token"));
   }
 };

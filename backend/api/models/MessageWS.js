@@ -8,13 +8,13 @@ const messageWSSchema = new mongoose.Schema({
   },
 
   senderId: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     index: true
   },
 
   receiverId: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     index: true
   },
@@ -54,6 +54,32 @@ const messageWSSchema = new mongoose.Schema({
     },
   },
 
+  storyReply: {
+    storyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Story",
+      default: null,
+    },
+    storyUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    previewText: {
+      type: String,
+      default: "",
+    },
+    mediaType: {
+      type: String,
+      enum: ["", "text", "image", "video"],
+      default: "",
+    },
+    mediaUrl: {
+      type: String,
+      default: "",
+    },
+  },
+
   messageId: {
     type: String,
     required: true,
@@ -68,9 +94,20 @@ const messageWSSchema = new mongoose.Schema({
     index: true,
   },
 
-}, { timestamps: true });
+  deliveredTo: {
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: "User",
+    default: [],
+  },
 
-messageWSSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+  readBy: {
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: "User",
+    default: [],
+  },
+
+}, { timestamps: true, minimize: false });
+
 messageWSSchema.index({ chatId: 1, createdAt: -1 });
 messageWSSchema.index({ senderId: 1, receiverId: 1 });
 

@@ -1,37 +1,41 @@
 import React from 'react'
-import { Users, UserPlus, UserCheck, UserRoundPen, MessageSquare } from 'lucide-react'
+import { Users, UserCheck, MessageSquare, Search } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { useState, useEffect } from 'react'
-import { useAuth } from '@clerk/clerk-react'
 import { fetchConnections } from '../features/connections/connectionsSlice'
 import api from '../api/axios'
 import toast from 'react-hot-toast'
+import { useAuth } from '../auth/AuthProvider'
+import UserCard from '../components/UserCard'
+import Loading from '../components/Loading'
+import Avatar from '../components/Avatar'
 
 const Connections = () => {
 
   const navigate = useNavigate();
-  const { getToken } = useAuth();
+  const { authHeaders, token } = useAuth();
   const dispatch = useDispatch();
-  const {connections, pendingConnections, followers, following} = useSelector((state)=>state.connections)
+  const {followers, following} = useSelector((state)=>state.connections)
 
   const [currentTab, setCurrentTab] = useState("Followers")
+  const [input, setInput] = useState('')
+  const [discoverUsers, setDiscoverUsers] = useState([])
+  const [discoverLoading, setDiscoverLoading] = useState(false)
 
   const dataArray = [
     {label: 'Followers', value: followers, icon: Users},
     {label: 'Following', value: following, icon: UserCheck},
-    {label: 'Pending', value: pendingConnections, icon: UserRoundPen},    
-    {label: 'Connections', value: connections, icon: UserPlus},    
   ]
 
   const handleUnfollow = async (userId) => {
     try {
       const { data } = await api.post('/api/user/unfollow', {id: userId}, {
-        headers: {Authorization: `Bearer ${await getToken()}`}
+        headers: authHeaders
       })
       if (data.success){
         toast.success(data.message)
-        dispatch(fetchConnections(await getToken()))
+        dispatch(fetchConnections(token))
       } else{
         toast(data.message)
       }
@@ -40,27 +44,39 @@ const Connections = () => {
     }
   } 
 
-  const acceptConnection = async (userId) => {
+  const openChat = async (userId) => {
     try {
-      const { data } = await api.post('/api/user/accept', {id: userId}, {
-        headers: {Authorization: `Bearer ${await getToken()}`}
-      })
-      if (data.success){
-        toast.success(data.message)
-        dispatch(fetchConnections(await getToken()))
-      } else{
-        toast(data.message)
-      }
+      const { data } = await api.post('/api/chat/chat', { receiverId: userId }, { headers: authHeaders })
+      if (data.success) navigate(`/app/messages/${data.data._id}`)
+      else toast.error(data.message)
     } catch (error) {
       toast.error(error.message)
     }
-  } 
+  }
 
   useEffect(() => {
-    getToken().then((token)=>{
-      dispatch(fetchConnections(token))
-    })
-  }, [])
+    if (token) dispatch(fetchConnections(token))
+  }, [token, dispatch])
+
+  useEffect(() => {
+    const timeout = setTimeout(async () => {
+      try {
+        setDiscoverLoading(true)
+        const { data } = await api.post('/api/user/discover', { input }, { headers: authHeaders })
+        if (data.success) {
+          setDiscoverUsers(data.users)
+        } else {
+          toast.error(data.message)
+        }
+      } catch (error) {
+        toast.error(error.message)
+      } finally {
+        setDiscoverLoading(false)
+      }
+    }, 250)
+
+    return () => clearTimeout(timeout)
+  }, [input, authHeaders])
   
 
   return (
@@ -69,8 +85,8 @@ const Connections = () => {
 
         {/* Title */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Connections</h1>
-          <p className="text-slate-600">Manage your network and discover new connections</p>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">People</h1>
+          <p className="text-slate-600">Manage your followers, the people you follow, and discover new people to connect with.</p>
         </div>
         
         {/* Count */}
@@ -100,18 +116,18 @@ const Connections = () => {
           }
         </div>
 
-        {/* Connections */}
+        {/* Network */}
         <div className="flex flex-wrap gap-6 mt-6">
           {dataArray.find((item)=> item.label === currentTab).value.map((user) => (
            <div key={user._id} className="w-full max-w-88 flex gap-5 p-6 bg-white rounded-md shadow">
-              <img src={user.profile_picture} alt="profile_picture" className='rounded-full size-12 mx-auto shadow-md' />
+              <Avatar src={user.profile_picture} alt={user.full_name} size="sm" />
               <div className='flex-1 w-full'>
                 <p className='font-medium text-slate-700'>{user.full_name}</p>
                 <p className='text-slate-500'>@{user.username}</p>
                 <p className='text-sm text-gray-600'>{user.bio.slice(0, 30)}...</p>
                 <div className="flex max-sm:flex-col gap-2 mt-4 w-full">  
                   {
-                    <button onClick={()=>navigate(`/profile/${user._id}`)} className='w-full p-2 text-sm rounded bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 transition cursor-pointer text-white'>
+                    <button onClick={()=>navigate(`/app/profile/${user._id}`)} className='w-full p-2 text-sm rounded bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 active:scale-95 transition cursor-pointer text-white'>
                       View Profile
                     </button>
                   }
@@ -122,25 +138,49 @@ const Connections = () => {
                       </button>
                     )
                   }
-                    {
-                      currentTab === 'Pending' && (
-                        <button onClick={()=> acceptConnection(user._id)} className='w-full p-2 text-sm bg-red-100 rounded hover:bg-red-200 active:scale-95 transition cursor-pointer text-black'>
-                          Accept
-                        </button>
-                      )
-                    }
-                  {
-                    currentTab === 'Connections' && (
-                      <button onClick={()=>navigate(`/messages/${user._id}`)} className='w-full p-2 text-sm bg-slate-100 rounded hover:bg-slate-200 active:scale-95 transition cursor-pointer flex items-center justify-center gap-1 text-slate-800'>
-                        <MessageSquare className='w-4 h-4' />
-                        Message
-                      </button>
-                    )
-                  }
+                  <button onClick={()=>openChat(user._id)} className='w-full p-2 text-sm bg-slate-100 rounded hover:bg-slate-200 active:scale-95 transition cursor-pointer flex items-center justify-center gap-1 text-slate-800'>
+                    <MessageSquare className='w-4 h-4' />
+                    Message
+                  </button>
                 </div>
               </div>
            </div> 
           ))}
+        </div>
+
+        <div className="mt-12 rounded-[2rem] border border-slate-200/60 bg-white/90 shadow-md">
+          <div className="border-b border-slate-100 p-6">
+            <h2 className="text-2xl font-semibold text-slate-900">Discover people</h2>
+            <p className="mt-2 text-sm text-slate-600">Search by name, username, bio, or location and start following people from here.</p>
+          </div>
+
+          <div className="p-6">
+            <div className="relative">
+              <Search className='absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5' />
+              <input
+                type="text"
+                placeholder='Search by name, username, bio, or location...'
+                className='w-full rounded-2xl border border-gray-300 py-3 pl-10 sm:pl-12 max-sm:text-sm'
+                onChange={(e)=>setInput(e.target.value)}
+                value={input}
+              />
+            </div>
+
+            {discoverLoading ? (
+              <Loading height='30vh' />
+            ) : (
+              <div className='mt-6 flex flex-wrap gap-6'>
+                {discoverUsers.map((user) => (
+                  <UserCard user={user} key={user._id} />
+                ))}
+                {!discoverUsers.length && (
+                  <div className='rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-sm text-slate-500'>
+                    No matching people found right now.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -6,7 +6,6 @@ import connectDB from './configs/db.js';
 
 import { inngest, functions } from './inngest/index.js';
 import { serve } from 'inngest/express';
-import { clerkMiddleware } from '@clerk/express';
 
 import { initSocket } from './sockets/index.js';
 import { connectProducer } from './kafka/producer.js';
@@ -37,8 +36,6 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-
-app.use(clerkMiddleware());
 
 /* ---------------- ROUTES ---------------- */
 

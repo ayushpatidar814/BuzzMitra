@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const chatSchema = new mongoose.Schema(
   {
     participants: { 
-      type: [String], 
+      type: [mongoose.Schema.Types.ObjectId],
       ref: "User",
       index: true, 
       required: true
@@ -12,8 +12,24 @@ const chatSchema = new mongoose.Schema(
       type: Boolean, 
       default: false 
     },
-    user: {
-      type: {},
+    groupName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    groupAvatar: {
+      type: String,
+      default: "",
+    },
+    groupAdminIds: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "User",
+      default: [],
+    },
+    groupOwnerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
     lastMessage: { 
       type: mongoose.Schema.Types.ObjectId, 
@@ -22,7 +38,7 @@ const chatSchema = new mongoose.Schema(
     clearedBy: [
       {
         userId: {
-          type: String,
+          type: mongoose.Schema.Types.ObjectId,
           index: true
         },
         clearedAt: {
@@ -38,5 +54,8 @@ const chatSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+chatSchema.index({ participants: 1, isGroup: 1 });
+chatSchema.index({ isGroup: 1, updatedAt: -1 });
 
 export default mongoose.model("Chat", chatSchema);

@@ -1,47 +1,55 @@
 import { useEffect } from "react";
-import { useAuth, useUser } from "@clerk/clerk-react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { socket } from "./socket";
-import { incrementUnread, resetAllUnread, } from "../features/messagesWS/chatCountSlice";
+import { incrementUnread, resetAllUnread, setInitialCounts, setUnreadChatsCount } from "../features/messagesWS/chatCountSlice";
+import { useAuth } from "../auth/AuthProvider";
+import api from "../api/axios";
 
 const SocketProvider = ({ children }) => {
-  const { isSignedIn, isLoaded, getToken } = useAuth();
-  const { user } = useUser();
+  const { token, isAuthenticated, authHeaders } = useAuth();
+  const user = useSelector((state) => state.user.value);
   const dispatch = useDispatch();
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user) return;
+    if (!isAuthenticated || !token || !user?._id) return;
 
-    const connect = async () => {
-      const token = await getToken();
-      socket.auth = { token };
-      socket.connect();
-      
-      socket.on("connect", () => {
-        socket.emit("join_user", user.id);
-      });
+    socket.auth = { token };
+    socket.connect();
 
-      /* 🔔 INBOX MESSAGE → redux only */
-      socket.on("inbox_message", (message) => {
-        if (message.receiverId === user.id) {
-          dispatch(incrementUnread(message.chatId));
+    api.get("/api/chat/chats", { headers: authHeaders })
+      .then(({ data }) => {
+        if (data.success) {
+          dispatch(setInitialCounts(data.data));
         }
-      });
+      })
+      .catch(() => {});
 
-      socket.on("connect_error", (err) =>
-        console.error("❌ socket error", err.message)
-      );
-
+    const onConnect = () => {
+      socket.emit("join_user", user._id);
     };
 
-    connect();
+    const onInbox = (message) => {
+      if (String(message.senderId) !== String(user._id)) {
+        dispatch(incrementUnread(message.chatId));
+      }
+    };
+
+    const onUnreadChatsCount = ({ count }) => {
+      dispatch(setUnreadChatsCount(count));
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("inbox_message", onInbox);
+    socket.on("unread_chats_count", onUnreadChatsCount);
 
     return () => {
-      socket.off("inbox_message");
+      socket.off("connect", onConnect);
+      socket.off("inbox_message", onInbox);
+      socket.off("unread_chats_count", onUnreadChatsCount);
       socket.disconnect();
       dispatch(resetAllUnread());
     };
-  }, [isLoaded, isSignedIn, user, getToken, dispatch]);
+  }, [token, isAuthenticated, user?._id, dispatch, authHeaders]);
 
   return children;
 };

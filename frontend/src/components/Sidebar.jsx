@@ -2,74 +2,62 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Home,
   MessageCircle,
-  Search,
   UserIcon,
   Users,
   CirclePlus,
   LogOut,
+  Clapperboard,
 } from "lucide-react";
-import { UserButton, useClerk, useUser } from "@clerk/clerk-react";
 import { useSelector } from "react-redux";
 import { selectTotalUnread } from "../features/messagesWS/chatSelectors";
-
-/* ---------------- MENU ASSETS ---------------- */
+import { useAuth } from "../auth/AuthProvider";
+import Avatar from "./Avatar";
 
 const menuItems = [
-  { to: "/", label: "Feed", Icon: Home },
-  { to: "/messages", label: "Messages", Icon: MessageCircle },
-  { to: "/connections", label: "Connections", Icon: Users },
-  { to: "/discover", label: "Discover", Icon: Search },
-  { to: "/profile", label: "Profile", Icon: UserIcon },
+  { to: "/app", label: "Feed", Icon: Home },
+  { to: "/app/reels", label: "Reels", Icon: Clapperboard },
+  { to: "/app/messages", label: "Messages", Icon: MessageCircle },
+  { to: "/app/connections", label: "People", Icon: Users },
+  { to: "/app/profile", label: "Profile", Icon: UserIcon },
 ];
-
-/* ---------------- SIDEBAR ---------------- */
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   const navigate = useNavigate();
-  const { signOut } = useClerk();
-  const { user } = useUser();
-
+  const { logout } = useAuth();
+  const user = useSelector((state) => state.user.value);
   const unreadChats = useSelector(selectTotalUnread);
 
   return (
     <div
-      className={`sticky w-60 xl:w-72 bg-white border-r border-gray-200 flex flex-col justify-between max-sm:absolute top-0 bottom-0 z-20
+      className={`sticky top-0 h-screen w-72 bg-slate-950/92 text-white border-r border-white/10 backdrop-blur-xl flex flex-col justify-between max-sm:absolute max-sm:inset-y-0 z-20
       ${sidebarOpen ? "translate-x-0" : "max-sm:-translate-x-full"}
       transition-all duration-300 ease-in-out`}
     >
-      {/* -------- TOP -------- */}
       <div className="w-full">
-        <img
-          onClick={() => navigate("/")}
-          src="/logo.png"
-          alt="logo"
-          className="w-28 ml-6 my-3 cursor-pointer"
-        />
+        <img onClick={() => navigate("/app")} src="/logo.png" alt="logo" className="w-28 ml-6 my-5 cursor-pointer" />
 
-        <hr className="border-gray-200 mb-6" />
+        <div className="mx-6 rounded-3xl border border-lime-300/20 bg-gradient-to-br from-lime-300/10 via-cyan-400/5 to-fuchsia-400/10 p-4 mb-6">
+          <p className="text-xs uppercase tracking-[0.28em] text-lime-200/70">Today on BuzzMitra</p>
+          <h2 className="mt-2 text-xl font-semibold leading-tight">Catch up on people you follow, jump into chats, and discover what is trending.</h2>
+        </div>
 
-        {/* -------- MENU -------- */}
-        <div className="px-4 space-y-1">
-          {menuItems.map(({ to, label, Icon }) => (
+        <div className="px-4 space-y-2">
+          {menuItems.map((item) => (
             <NavLink
-              key={to}
-              to={to}
+              key={item.to}
+              to={item.to}
+              end={item.to === "/app"}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `relative flex items-center gap-3 px-3 py-2 rounded-lg transition
-                ${
-                  isActive
-                    ? "bg-slate-100 font-medium"
-                    : "hover:bg-slate-100"
+                `relative flex items-center gap-3 px-4 py-3 rounded-2xl transition ${
+                  isActive ? "bg-white text-slate-950 font-semibold" : "text-slate-300 hover:bg-white/5"
                 }`
               }
             >
-              <Icon className="w-5 h-5" />
-              <span>{label}</span>
-
-              {/* 🔴 UNREAD CHAT BADGE */}
-              {label === "Messages" && unreadChats > 0 && (
-                <span className="absolute right-3 bg-indigo-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+              <item.Icon className="w-5 h-5" />
+              <span>{item.label}</span>
+              {item.label === "Messages" && unreadChats > 0 && (
+                <span className="absolute right-3 bg-lime-300 text-slate-950 text-xs font-bold px-2 py-1 rounded-full">
                   {unreadChats}
                 </span>
               )}
@@ -77,34 +65,26 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
           ))}
         </div>
 
-        {/* -------- CREATE POST -------- */}
         <Link
-          to="/create-post"
+          to="/app/create-post"
           onClick={() => setSidebarOpen(false)}
-          className="flex items-center justify-center gap-2 py-2.5 mt-6 mx-6 rounded-lg
-          bg-gradient-to-r from-purple-500 to-indigo-600
-          hover:from-purple-700 hover:to-indigo-800
-          active:scale-95 transition text-white"
+          className="flex items-center justify-center gap-2 py-3 mt-6 mx-6 rounded-2xl bg-gradient-to-r from-lime-300 via-cyan-300 to-fuchsia-300 hover:brightness-105 active:scale-95 transition text-slate-950 font-semibold"
         >
           <CirclePlus className="w-5 h-5" />
-          Create Post
+          Create
         </Link>
       </div>
 
-      {/* -------- BOTTOM -------- */}
-      <div className="w-full border-t border-gray-200 p-4 px-6 flex items-center justify-between">
-        <div className="flex gap-2 items-center">
-          <UserButton />
+      <div className="w-full border-t border-white/10 p-4 px-6 flex items-center justify-between">
+        <div className="flex gap-3 items-center">
+          <Avatar src={user?.profile_picture} alt={user?.full_name || "Profile"} size="sm" className="border border-white/10 bg-white/10" />
           <div>
             <h1 className="text-sm font-medium">{user?.full_name}</h1>
-            <p className="text-xs text-gray-500">@{user?.username}</p>
+            <p className="text-xs text-slate-400">@{user?.username}</p>
           </div>
         </div>
 
-        <LogOut
-          onClick={signOut}
-          className="w-5 text-gray-400 cursor-pointer hover:text-gray-700 transition"
-        />
+        <LogOut onClick={logout} className="w-5 text-slate-400 cursor-pointer hover:text-white transition" />
       </div>
     </div>
   );
