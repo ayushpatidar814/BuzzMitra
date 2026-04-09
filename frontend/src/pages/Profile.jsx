@@ -1,18 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { Clapperboard, Grid2X2, Images, Sparkles } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Loading from '../components/Loading'
 import UserProfileInfo from '../components/UserProfileInfo'
-import ProfileConnectionsModal from '../components/ProfileConnectionsModal'
 import PostCard from '../components/PostCard'
 import moment from 'moment'
-import ProfileModel from '../components/ProfileModel'
 import toast from 'react-hot-toast'
 import { useDispatch, useSelector } from 'react-redux'
 import api from '../api/axios'
 import { useAuth } from '../auth/AuthProvider'
 import { fetchConnections } from '../features/connections/connectionsSlice'
 import { fetchUser as refreshCurrentUser } from '../features/user/userSlice'
+
+const ProfileConnectionsModal = lazy(() => import('../components/ProfileConnectionsModal'))
+const ProfileModel = lazy(() => import('../components/ProfileModel'))
 
 const tabMeta = {
   posts: {
@@ -46,6 +47,16 @@ const Profile = () => {
   const [reels, setReels] = useState([])
   const [followers, setFollowers] = useState([])
   const [following, setFollowing] = useState([])
+  const [postsCursor, setPostsCursor] = useState(null)
+  const [reelsCursor, setReelsCursor] = useState(null)
+  const [postsHasMore, setPostsHasMore] = useState(false)
+  const [reelsHasMore, setReelsHasMore] = useState(false)
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false)
+  const [loadingMoreReels, setLoadingMoreReels] = useState(false)
+  const [connectionsState, setConnectionsState] = useState({
+    followers: { items: [], cursor: null, hasMore: false, loading: false },
+    following: { items: [], cursor: null, hasMore: false, loading: false },
+  })
   const [stats, setStats] = useState({ postCount: 0, reelCount: 0, totalContentCount: 0, mediaCount: 0 })
   const [activeTab, setActiveTab] = useState('posts')
   const [showEdit, setShowEdit] = useState(false)
@@ -62,8 +73,16 @@ const Profile = () => {
         setUser(data.profile)
         setPosts(data.posts)
         setReels(data.reels || [])
-        setFollowers(data.followers || [])
-        setFollowing(data.following || [])
+        setFollowers(data.followersPreview || data.followers || [])
+        setFollowing(data.followingPreview || data.following || [])
+        setPostsHasMore(Boolean(data.postsHasMore))
+        setReelsHasMore(Boolean(data.reelsHasMore))
+        setPostsCursor(data.postsNextCursor || null)
+        setReelsCursor(data.reelsNextCursor || null)
+        setConnectionsState({
+          followers: { items: data.followersPreview || data.followers || [], cursor: null, hasMore: (data.profile?.followers_count || 0) > (data.followersPreview || data.followers || []).length, loading: false },
+          following: { items: data.followingPreview || data.following || [], cursor: null, hasMore: (data.profile?.following_count || 0) > (data.followingPreview || data.following || []).length, loading: false },
+        })
         setStats(
           data.stats || {
             postCount: data.posts?.length || 0,
@@ -87,6 +106,83 @@ const Profile = () => {
       fetchUser(currentUser._id)
     }
   }, [profileId, currentUser?._id, fetchUser])
+
+  const targetProfileId = profileId || currentUser?._id
+
+  const fetchMoreContent = useCallback(async (type) => {
+    if (!targetProfileId) return
+    const isReels = type === 'reels'
+    const cursor = isReels ? reelsCursor : postsCursor
+    const hasMore = isReels ? reelsHasMore : postsHasMore
+    if (!cursor || !hasMore) return
+
+    try {
+      isReels ? setLoadingMoreReels(true) : setLoadingMorePosts(true)
+      const { data } = await api.getDedup(`/api/user/profiles/${targetProfileId}/content`, {
+        headers: authHeaders,
+        params: { type, cursor },
+      })
+      if (!data.success) throw new Error(data.message)
+      if (isReels) {
+        setReels((prev) => [...prev, ...(data.items || [])])
+        setReelsHasMore(Boolean(data.hasMore))
+        setReelsCursor(data.nextCursor || null)
+      } else {
+        setPosts((prev) => [...prev, ...(data.items || [])])
+        setPostsHasMore(Boolean(data.hasMore))
+        setPostsCursor(data.nextCursor || null)
+      }
+    } catch (error) {
+      toast.error(error.message)
+    } finally {
+      isReels ? setLoadingMoreReels(false) : setLoadingMorePosts(false)
+    }
+  }, [authHeaders, postsCursor, postsHasMore, reelsCursor, reelsHasMore, targetProfileId])
+
+  const fetchMoreConnections = useCallback(async (type) => {
+    if (!targetProfileId) return
+    const currentState = connectionsState[type]
+    const nextCursor = currentState.cursor
+    setConnectionsState((prev) => ({
+      ...prev,
+      [type]: { ...prev[type], loading: true },
+    }))
+
+    try {
+      const { data } = await api.getDedup(`/api/user/profiles/${targetProfileId}/connections`, {
+        headers: authHeaders,
+        params: {
+          type,
+          ...(nextCursor ? { cursor: nextCursor } : {}),
+        },
+      })
+      if (!data.success) throw new Error(data.message)
+      setConnectionsState((prev) => ({
+        ...prev,
+        [type]: {
+          items: nextCursor ? [...prev[type].items, ...(data.users || [])] : (data.users || []),
+          cursor: data.nextCursor || null,
+          hasMore: Boolean(data.hasMore),
+          loading: false,
+        },
+      }))
+      if (type === 'followers') setFollowers((prev) => (nextCursor ? [...prev, ...(data.users || [])] : (data.users || [])))
+      else setFollowing((prev) => (nextCursor ? [...prev, ...(data.users || [])] : (data.users || [])))
+    } catch (error) {
+      toast.error(error.message)
+      setConnectionsState((prev) => ({
+        ...prev,
+        [type]: { ...prev[type], loading: false },
+      }))
+    }
+  }, [authHeaders, connectionsState, targetProfileId])
+
+  useEffect(() => {
+    if (!connectionsModal) return
+    if (!connectionsState[connectionsModal].items.length) {
+      fetchMoreConnections(connectionsModal)
+    }
+  }, [connectionsModal, connectionsState, fetchMoreConnections])
 
   useEffect(() => {
     const handleFocus = () => {
@@ -225,6 +321,15 @@ const Profile = () => {
                     No posts yet.
                   </div>
                 )}
+                {postsHasMore && (
+                  <button
+                    onClick={() => fetchMoreContent('posts')}
+                    disabled={loadingMorePosts}
+                    className='rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 disabled:opacity-60'
+                  >
+                    {loadingMorePosts ? 'Loading...' : 'Load more posts'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -263,6 +368,15 @@ const Profile = () => {
                     No reels yet.
                   </div>
                 )}
+                {reelsHasMore && (
+                  <button
+                    onClick={() => fetchMoreContent('reels')}
+                    disabled={loadingMoreReels}
+                    className='sm:col-span-2 xl:col-span-3 justify-self-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 disabled:opacity-60'
+                  >
+                    {loadingMoreReels ? 'Loading...' : 'Load more reels'}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -300,13 +414,22 @@ const Profile = () => {
         </div>
       </div>
 
-      {showEdit && <ProfileModel setShowEdit={setShowEdit} />}
+      {showEdit && (
+        <Suspense fallback={null}>
+          <ProfileModel setShowEdit={setShowEdit} />
+        </Suspense>
+      )}
       {connectionsModal && (
-        <ProfileConnectionsModal
-          title={connectionsModal === 'followers' ? 'Followers' : 'Following'}
-          users={connectionsModal === 'followers' ? followers : following}
-          onClose={() => setConnectionsModal(null)}
-        />
+        <Suspense fallback={null}>
+          <ProfileConnectionsModal
+            title={connectionsModal === 'followers' ? 'Followers' : 'Following'}
+            users={connectionsState[connectionsModal].items}
+            hasMore={connectionsState[connectionsModal].hasMore}
+            loading={connectionsState[connectionsModal].loading}
+            onLoadMore={() => fetchMoreConnections(connectionsModal)}
+            onClose={() => setConnectionsModal(null)}
+          />
+        </Suspense>
       )}
     </div>
   )

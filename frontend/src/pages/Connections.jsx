@@ -22,11 +22,15 @@ const Connections = () => {
   const [input, setInput] = useState('')
   const [discoverUsers, setDiscoverUsers] = useState([])
   const [discoverLoading, setDiscoverLoading] = useState(false)
+  const [showAllNetwork, setShowAllNetwork] = useState(false)
 
   const dataArray = [
     {label: 'Followers', value: followers, icon: Users},
     {label: 'Following', value: following, icon: UserCheck},
   ]
+  const currentUsers = dataArray.find((item)=> item.label === currentTab).value || []
+  const previewLimit = 4
+  const visibleUsers = showAllNetwork ? currentUsers : currentUsers.slice(0, previewLimit)
 
   const handleUnfollow = async (userId) => {
     try {
@@ -57,6 +61,10 @@ const Connections = () => {
   useEffect(() => {
     if (token) dispatch(fetchConnections(token))
   }, [token, dispatch])
+
+  useEffect(() => {
+    setShowAllNetwork(false)
+  }, [currentTab])
 
   useEffect(() => {
     const timeout = setTimeout(async () => {
@@ -117,8 +125,8 @@ const Connections = () => {
         </div>
 
         {/* Network */}
-        <div className="flex flex-wrap gap-6 mt-6">
-          {dataArray.find((item)=> item.label === currentTab).value.map((user) => (
+        <div className="grid gap-6 mt-6 md:grid-cols-2">
+          {visibleUsers.map((user) => (
            <div key={user._id} className="w-full max-w-88 flex gap-5 p-6 bg-white rounded-md shadow">
               <Avatar src={user.profile_picture} alt={user.full_name} size="sm" />
               <div className='flex-1 w-full'>
@@ -147,6 +155,16 @@ const Connections = () => {
            </div> 
           ))}
         </div>
+        {currentUsers.length > previewLimit && (
+          <div className="mt-5 flex justify-center">
+            <button
+              onClick={() => setShowAllNetwork((prev) => !prev)}
+              className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              {showAllNetwork ? 'Show less' : `Show more ${currentTab.toLowerCase()}`}
+            </button>
+          </div>
+        )}
 
         <div className="mt-12 rounded-[2rem] border border-slate-200/60 bg-white/90 shadow-md">
           <div className="border-b border-slate-100 p-6">

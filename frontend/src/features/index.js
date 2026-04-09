@@ -3,6 +3,7 @@ import userReducer from './user/userSlice.js'
 // import messagesReducer from './messages/messagesSlice.js'
 import connectionsReducer from './connections/connectionsSlice.js'
 import chatCountReducer from "./messagesWS/chatCountSlice.js";
+import notificationsReducer from "./notifications/notificationsSlice.js";
 // import chatReducer from './messages/chatSlice.js'
 // import messageReducer from "./messagesWS/messageSlice.js";
 
@@ -12,6 +13,7 @@ export const store = configureStore({
         connections: connectionsReducer,
         // messages: messagesReducer,
         // chat: chatReducer
-        chatCount: chatCountReducer
+        chatCount: chatCountReducer,
+        notifications: notificationsReducer
     }
 })

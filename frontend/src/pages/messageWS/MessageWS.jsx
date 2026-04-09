@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import Loading from "../../components/Loading";
 import { useAuth } from "../../auth/AuthProvider";
 import Avatar from "../../components/Avatar";
+import VirtualList from "../../components/VirtualList";
 
 const MessageWS = () => {
   const [chats, setChats] = useState([]);
@@ -31,9 +32,13 @@ const MessageWS = () => {
   const fetchChats = useCallback(async () => {
     try {
       setLoading(true);
-      const { data } = await api.get("/api/chat/chats", { headers: authHeaders });
+      const { data } = await api.getDedup("/api/chat/chats", { headers: authHeaders });
       if (data.success) {
-        setChats(data.data);
+        setChats((prev) => {
+          const incoming = data.data || [];
+          const map = new Map([...prev, ...incoming].map((chat) => [String(chat._id), chat]));
+          return Array.from(map.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        });
         dispatch(setInitialCounts(data.data));
       } else {
         toast.error(data.message);
@@ -73,8 +78,16 @@ const MessageWS = () => {
       });
     };
 
+    const handleInboxMessageBatch = (payload = []) => {
+      payload.forEach(handleInboxMessage);
+    };
+
     socket.on("inbox_message", handleInboxMessage);
-    return () => socket.off("inbox_message", handleInboxMessage);
+    socket.on("inbox_message_batch", handleInboxMessageBatch);
+    return () => {
+      socket.off("inbox_message", handleInboxMessage);
+      socket.off("inbox_message_batch", handleInboxMessageBatch);
+    };
   }, [socket, user?._id, network]);
 
   const clearChatForMe = async (chatId) => {
@@ -161,8 +174,13 @@ const MessageWS = () => {
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats or people" className="flex-1 bg-transparent outline-none" />
           </div>
 
-          <div className="mt-6 space-y-3">
-            {filteredChats.map((chat) => {
+          <div className="mt-6">
+            <VirtualList
+              items={filteredChats}
+              itemHeight={92}
+              height={Math.min(620, Math.max(220, filteredChats.length * 92))}
+              className="overflow-y-auto"
+              renderItem={(chat) => {
               const otherUser = chat.otherUser;
               const unreadCount = perChat[chat._id] || 0;
               return (
@@ -190,7 +208,8 @@ const MessageWS = () => {
                   </div>
                 </div>
               );
-            })}
+            }}
+            />
 
             {search && filteredChats.length === 0 && (
               <div>

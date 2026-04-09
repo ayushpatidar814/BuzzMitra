@@ -2,6 +2,7 @@ import Chat from "../models/Chat.js";
 import MessageWS from "../models/MessageWS.js";
 import { onlineUsers } from "./index.js";
 import { sendMessageToKafka } from "../kafka/producer.js";
+import { emitBatched } from "./emitBatch.js";
 
 const emitDeliveredUpdates = async (io, userId) => {
   const undeliveredMessages = await MessageWS.find({
@@ -33,13 +34,13 @@ const emitDeliveredUpdates = async (io, userId) => {
         }
       );
 
-      io.to(String(message.chatId)).emit("message_status", {
+      emitBatched(io, String(message.chatId), "message_status", {
         messageId: message.messageId,
         deliveredTo,
         readBy,
         status: nextStatus,
       });
-      io.to(`user:${message.senderId}`).emit("message_delivered", {
+      emitBatched(io, `user:${message.senderId}`, "message_delivered", {
         messageId: message.messageId,
         deliveredTo,
         status: nextStatus,
@@ -61,7 +62,7 @@ export const chatSocketHandler = (io, socket) => {
 
     const chats = await Chat.find({ participants: userId }).lean();
     const unreadChatsCount = chats.filter((chat) => Number(chat.unreadCount?.[String(userId)] || 0) > 0).length;
-    io.to(`user:${userId}`).emit("unread_chats_count", { count: unreadChatsCount });
+    emitBatched(io, `user:${userId}`, "unread_chats_count", { count: unreadChatsCount });
     await emitDeliveredUpdates(io, userId);
   });
 
@@ -90,13 +91,13 @@ export const chatSocketHandler = (io, socket) => {
             : "sent";
 
         await MessageWS.updateOne({ _id: message._id }, { $addToSet: { deliveredTo: socket.user.id }, $set: { status: nextStatus } });
-        io.to(chatId).emit("message_status", {
+        emitBatched(io, chatId, "message_status", {
           messageId: message.messageId,
           deliveredTo,
           readBy,
           status: nextStatus,
         });
-        io.to(`user:${message.senderId}`).emit("message_delivered", {
+        emitBatched(io, `user:${message.senderId}`, "message_delivered", {
           messageId: message.messageId,
           deliveredTo,
           status: nextStatus,
@@ -158,7 +159,7 @@ export const chatSocketHandler = (io, socket) => {
     const chats = await Chat.find({ participants: socket.user.id }).lean();
     const unreadChatsCount = chats.filter((chat) => Number(chat.unreadCount?.[String(socket.user.id)] || 0) > 0).length;
 
-    io.to(`user:${socket.user.id}`).emit("unread_chats_count", { count: unreadChatsCount });
+    emitBatched(io, `user:${socket.user.id}`, "unread_chats_count", { count: unreadChatsCount });
 
     const readMessages = await MessageWS.find({
       chatId,
@@ -166,13 +167,13 @@ export const chatSocketHandler = (io, socket) => {
     }).select("messageId senderId deliveredTo readBy status");
 
     readMessages.forEach((message) => {
-      io.to(`user:${message.senderId}`).emit("message_read", {
+      emitBatched(io, `user:${message.senderId}`, "message_read", {
         messageId: message.messageId,
         deliveredTo: (message.deliveredTo || []).map((id) => String(id)),
         readBy: (message.readBy || []).map((id) => String(id)),
         status: message.status,
       });
-      io.to(chatId).emit("message_status", {
+      emitBatched(io, chatId, "message_status", {
         messageId: message.messageId,
         deliveredTo: (message.deliveredTo || []).map((id) => String(id)),
         readBy: (message.readBy || []).map((id) => String(id)),

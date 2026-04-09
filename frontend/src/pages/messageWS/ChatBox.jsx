@@ -12,6 +12,20 @@ import { useAuth } from "../../auth/AuthProvider.jsx";
 import chatBg from "../../assets/chatbox_background.png";
 import Avatar from "../../components/Avatar.jsx";
 
+const mergeMessages = (previous = [], incoming = []) => {
+  const map = new Map();
+  [...previous, ...incoming].forEach((message) => {
+    const key = String(message.messageId || `${message._id}-${message.createdAt}`);
+    const existing = map.get(key);
+    map.set(key, existing ? { ...existing, ...message } : message);
+  });
+  return Array.from(map.values()).sort((left, right) => {
+    const timeGap = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    if (timeGap !== 0) return timeGap;
+    return String(left.messageId || left._id).localeCompare(String(right.messageId || right._id));
+  });
+};
+
 const ChatBox = () => {
   const { chatId } = useParams();
   const { authHeaders } = useAuth();
@@ -20,6 +34,9 @@ const ChatBox = () => {
   const [user, setUser] = useState(null);
   const [chatMeta, setChatMeta] = useState(null);
   const [chats, setChats] = useState([]);
+  const [messagesCursor, setMessagesCursor] = useState(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [text, setText] = useState("");
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -50,11 +67,13 @@ const ChatBox = () => {
 
     const fetchMessages = async () => {
       try {
-        const { data } = await api.get(`/api/chat/messages/${chatId}`, { headers: authHeaders });
+        const { data } = await api.getDedup(`/api/chat/messages/${chatId}`, { headers: authHeaders });
         if (data.success) {
-          setChats(data.data.messages || []);
+          setChats(mergeMessages([], data.data.messages || []));
           setUser(data.data.receiver || null);
           setChatMeta(data.data.chat || null);
+          setHasMoreMessages(Boolean(data.data.hasMore));
+          setMessagesCursor(data.data.nextCursor || null);
           setGroupName(data.data.chat?.groupName || "");
           setGroupAvatarFile(null);
           dispatch(resetChatUnread(chatId));
@@ -67,6 +86,25 @@ const ChatBox = () => {
     fetchMessages();
   }, [chatId, authHeaders, dispatch]);
 
+  const loadOlderMessages = async () => {
+    if (!chatId || !messagesCursor || loadingOlderMessages) return;
+    try {
+      setLoadingOlderMessages(true);
+      const { data } = await api.get(`/api/chat/messages/${chatId}`, {
+        headers: authHeaders,
+        params: { cursor: messagesCursor, limit: 40 },
+      });
+      if (!data.success) throw new Error(data.message);
+      setChats((prev) => mergeMessages(prev, data.data.messages || []));
+      setHasMoreMessages(Boolean(data.data.hasMore));
+      setMessagesCursor(data.data.nextCursor || null);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  };
+
   useEffect(() => {
     if (!chatId || !socket) return;
     if (joinedChatsRef.current.has(chatId)) return;
@@ -76,7 +114,11 @@ const ChatBox = () => {
 
     const handleNewMessage = (message) => {
       if (String(message.chatId) !== String(chatId)) return;
-      setChats((prev) => (prev.some((item) => item.messageId === message.messageId) ? prev : [...prev, message]));
+      setChats((prev) => mergeMessages(prev, [message]));
+    };
+
+    const handleNewMessageBatch = (messages = []) => {
+      setChats((prev) => mergeMessages(prev, messages));
     };
 
     const handleTyping = ({ chatId: nextChatId, userId, isTyping }) => {
@@ -108,21 +150,29 @@ const ChatBox = () => {
     };
 
     socket.on("new_message", handleNewMessage);
+    socket.on("new_message_batch", handleNewMessageBatch);
     socket.on("typing", handleTyping);
     socket.on("message_deleted", handleDeleted);
     socket.on("message_edited", handleEdited);
     socket.on("message_delivered", applyStatus);
     socket.on("message_read", applyStatus);
     socket.on("message_status", applyStatus);
+    socket.on("message_delivered_batch", (items = []) => items.forEach(applyStatus));
+    socket.on("message_read_batch", (items = []) => items.forEach(applyStatus));
+    socket.on("message_status_batch", (items = []) => items.forEach(applyStatus));
 
     return () => {
       socket.off("new_message", handleNewMessage);
+      socket.off("new_message_batch", handleNewMessageBatch);
       socket.off("typing", handleTyping);
       socket.off("message_deleted", handleDeleted);
       socket.off("message_edited", handleEdited);
       socket.off("message_delivered", applyStatus);
       socket.off("message_read", applyStatus);
       socket.off("message_status", applyStatus);
+      socket.off("message_delivered_batch");
+      socket.off("message_read_batch");
+      socket.off("message_status_batch");
     };
   }, [chatId, socket]);
 
@@ -179,17 +229,14 @@ const ChatBox = () => {
         media: uploadedMedia || null,
       };
 
-      setChats((prev) => [
-        ...prev,
-        {
-          ...payload,
-          senderId: myUserId,
-          status: "sent",
-          deliveredTo: [myUserId],
-          readBy: [myUserId],
-          createdAt: new Date().toISOString(),
-        },
-      ]);
+      setChats((prev) => mergeMessages(prev, [{
+        ...payload,
+        senderId: myUserId,
+        status: "sent",
+        deliveredTo: [myUserId],
+        readBy: [myUserId],
+        createdAt: new Date().toISOString(),
+      }]));
       socket.emit("send_message", payload);
       setText("");
       setImage(null);
@@ -355,6 +402,17 @@ const ChatBox = () => {
 
       <div className="h-full overflow-y-scroll p-5 md:px-10" style={{ backgroundImage: `url(${chatBg})` }}>
         <div className="mx-auto max-w-5xl space-y-4">
+          {hasMoreMessages && (
+            <div className="flex justify-center">
+              <button
+                onClick={loadOlderMessages}
+                disabled={loadingOlderMessages}
+                className="rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm text-slate-700 shadow-sm backdrop-blur disabled:opacity-60"
+              >
+                {loadingOlderMessages ? "Loading older messages..." : "Load older messages"}
+              </button>
+            </div>
+          )}
           {chats.map((message) => {
             const isSender = String(message.senderId) === String(myUserId);
 
@@ -513,8 +571,8 @@ const ChatBox = () => {
       )}
       {groupSheetOpen && chatMeta?.isGroup && (
         <div className="fixed inset-0 z-[120] bg-black/50 p-4 backdrop-blur-sm">
-          <div className="mx-auto mt-8 max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between">
+          <div className="mx-auto mt-4 flex max-h-[calc(100vh-2rem)] max-w-lg flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
               <div>
                 <p className="text-sm uppercase tracking-[0.22em] text-slate-400">Group details</p>
                 <h3 className="mt-2 text-xl font-semibold text-slate-900">{chatMeta.groupName}</h3>
@@ -523,158 +581,160 @@ const ChatBox = () => {
               <button onClick={() => setGroupSheetOpen(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm">Close</button>
             </div>
 
-            <div className="mt-5 flex items-center gap-4 rounded-2xl bg-slate-50 p-4">
-              <Avatar src={groupAvatarFile ? URL.createObjectURL(groupAvatarFile) : chatMeta.groupAvatar} size="xl" alt={chatMeta.groupName} />
-              <div>
-                <p className="font-medium text-slate-900">Group photo</p>
-                <p className="mt-1 text-sm text-slate-500">Keep your group easy to spot in the inbox.</p>
-                {isGroupAdmin && (
-                  <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
-                    Choose photo
-                    <input
-                      type="file"
-                      hidden
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        setGroupAvatarFile(file || null);
-                        if (file) updateGroupAvatar(file);
-                      }}
-                    />
-                  </label>
-                )}
+            <div className="overflow-y-auto px-6 py-5">
+              <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4">
+                <Avatar src={groupAvatarFile ? URL.createObjectURL(groupAvatarFile) : chatMeta.groupAvatar} size="xl" alt={chatMeta.groupName} />
+                <div>
+                  <p className="font-medium text-slate-900">Group photo</p>
+                  <p className="mt-1 text-sm text-slate-500">Keep your group easy to spot in the inbox.</p>
+                  {isGroupAdmin && (
+                    <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
+                      Choose photo
+                      <input
+                        type="file"
+                        hidden
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          setGroupAvatarFile(file || null);
+                          if (file) updateGroupAvatar(file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm font-medium text-slate-900">Members</p>
-              <div className="mt-3 max-h-56 space-y-3 overflow-y-auto">
-                {(chatMeta.participants || []).map((member) => (
-                  <div key={member._id} className="flex items-center justify-between rounded-2xl bg-white px-3 py-3">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/app/profile/${member._id}`)}
-                      className="flex items-center gap-3 text-left"
-                    >
-                      <Avatar src={member.profile_picture} size="sm" alt={member.full_name} />
-                      <div>
-                        <p className="font-medium text-slate-900">{member.full_name}</p>
-                        <p className="text-sm text-slate-500">@{member.username}</p>
-                      </div>
-                    </button>
-                    <div className="flex items-center gap-2">
-                      {String(chatMeta.groupOwnerId) === String(member._id) && <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700">Owner</span>}
-                      {String(chatMeta.groupOwnerId) !== String(member._id) && chatMeta.groupAdminIds?.includes(String(member._id)) && <span className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-semibold text-white">Admin</span>}
-                      {isGroupAdmin && String(member._id) !== String(myUserId) && (
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setMemberMenuId((prev) => prev === String(member._id) ? null : String(member._id))}
-                            className="rounded-full bg-slate-100 p-2 text-slate-600"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                          {memberMenuId === String(member._id) && (
-                            <div className="absolute right-0 top-10 z-20 min-w-[9rem] rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                              {isGroupAdmin && !chatMeta.groupAdminIds?.includes(String(member._id)) && (
-                                <button
-                                  disabled={groupActionLoading}
-                                  onClick={() => {
-                                    setMemberMenuId(null);
-                                    updateMemberRole(member._id, "promote");
-                                  }}
-                                  className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                                >
-                                  Make admin
-                                </button>
-                              )}
-                              {isGroupAdmin && chatMeta.groupAdminIds?.includes(String(member._id)) && String(chatMeta.groupOwnerId) !== String(member._id) && (
-                                <>
+              <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-900">Members</p>
+                <div className="mt-3 max-h-56 space-y-3 overflow-y-auto">
+                  {(chatMeta.participants || []).map((member) => (
+                    <div key={member._id} className="flex items-center justify-between rounded-2xl bg-white px-3 py-3">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/app/profile/${member._id}`)}
+                        className="flex items-center gap-3 text-left"
+                      >
+                        <Avatar src={member.profile_picture} size="sm" alt={member.full_name} />
+                        <div>
+                          <p className="font-medium text-slate-900">{member.full_name}</p>
+                          <p className="text-sm text-slate-500">@{member.username}</p>
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        {String(chatMeta.groupOwnerId) === String(member._id) && <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700">Owner</span>}
+                        {String(chatMeta.groupOwnerId) !== String(member._id) && chatMeta.groupAdminIds?.includes(String(member._id)) && <span className="rounded-full bg-slate-950 px-2 py-1 text-[10px] font-semibold text-white">Admin</span>}
+                        {isGroupAdmin && String(member._id) !== String(myUserId) && (
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setMemberMenuId((prev) => prev === String(member._id) ? null : String(member._id))}
+                              className="rounded-full bg-slate-100 p-2 text-slate-600"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
+                            {memberMenuId === String(member._id) && (
+                              <div className="absolute right-0 top-10 z-20 min-w-[9rem] rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                                {isGroupAdmin && !chatMeta.groupAdminIds?.includes(String(member._id)) && (
                                   <button
                                     disabled={groupActionLoading}
                                     onClick={() => {
                                       setMemberMenuId(null);
-                                      updateMemberRole(member._id, "demote");
+                                      updateMemberRole(member._id, "promote");
                                     }}
                                     className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                                   >
-                                    Remove admin
+                                    Make admin
                                   </button>
-                                  {isGroupOwner && (
+                                )}
+                                {isGroupAdmin && chatMeta.groupAdminIds?.includes(String(member._id)) && String(chatMeta.groupOwnerId) !== String(member._id) && (
+                                  <>
                                     <button
                                       disabled={groupActionLoading}
                                       onClick={() => {
                                         setMemberMenuId(null);
-                                        updateMemberRole(member._id, "transfer-owner");
+                                        updateMemberRole(member._id, "demote");
                                       }}
-                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-amber-700 hover:bg-amber-50"
+                                      className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                                     >
-                                      Make owner
+                                      Remove admin
                                     </button>
-                                  )}
-                                </>
-                              )}
-                              {((!chatMeta.groupAdminIds?.includes(String(member._id))) || isGroupOwner) && String(chatMeta.groupOwnerId) !== String(member._id) && (
-                                <button
-                                  disabled={groupActionLoading}
-                                  onClick={() => {
-                                    setMemberMenuId(null);
-                                    removeMember(member._id);
-                                  }}
-                                  className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                                    {isGroupOwner && (
+                                      <button
+                                        disabled={groupActionLoading}
+                                        onClick={() => {
+                                          setMemberMenuId(null);
+                                          updateMemberRole(member._id, "transfer-owner");
+                                        }}
+                                        className="block w-full rounded-xl px-3 py-2 text-left text-sm text-amber-700 hover:bg-amber-50"
+                                      >
+                                        Make owner
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                                {((!chatMeta.groupAdminIds?.includes(String(member._id))) || isGroupOwner) && String(chatMeta.groupOwnerId) !== String(member._id) && (
+                                  <button
+                                    disabled={groupActionLoading}
+                                    onClick={() => {
+                                      setMemberMenuId(null);
+                                      removeMember(member._id);
+                                    }}
+                                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {isGroupAdmin && (
-              <>
-                <div className="mt-5">
-                  <label className="text-sm font-medium text-slate-900">Rename group</label>
-                  <div className="mt-2 flex gap-2">
-                    <input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 outline-none" />
-                    <button disabled={groupActionLoading} onClick={renameGroup} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">Save</button>
-                  </div>
+                  ))}
                 </div>
+              </div>
 
-                {!!availableMembers.length && (
+              {isGroupAdmin && (
+                <>
                   <div className="mt-5">
-                    <p className="text-sm font-medium text-slate-900">Add members</p>
-                    <div className="mt-3 max-h-44 space-y-2 overflow-y-auto">
-                      {availableMembers.map((person) => {
-                        const checked = selectedMembers.includes(String(person._id));
-                        return (
-                          <label key={person._id} className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 ${checked ? "border-slate-950 bg-slate-50" : "border-slate-200"}`}>
-                            <input type="checkbox" checked={checked} onChange={() => setSelectedMembers((prev) => checked ? prev.filter((id) => id !== String(person._id)) : [...prev, String(person._id)])} />
-                            <Avatar src={person.profile_picture} size="sm" alt={person.full_name} />
-                            <div>
-                              <p className="font-medium text-slate-900">{person.full_name}</p>
-                              <p className="text-sm text-slate-500">@{person.username}</p>
-                            </div>
-                          </label>
-                        );
-                      })}
+                    <label className="text-sm font-medium text-slate-900">Rename group</label>
+                    <div className="mt-2 flex gap-2">
+                      <input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 outline-none" />
+                      <button disabled={groupActionLoading} onClick={renameGroup} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">Save</button>
                     </div>
-                    <button disabled={groupActionLoading || !selectedMembers.length} onClick={addMembers} className="mt-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
-                      Add selected members
-                    </button>
                   </div>
-                )}
-              </>
-            )}
 
-            <button disabled={groupActionLoading} onClick={handleLeaveGroup} className="mt-6 w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
-              Leave group
-            </button>
+                  {!!availableMembers.length && (
+                    <div className="mt-5">
+                      <p className="text-sm font-medium text-slate-900">Add members</p>
+                      <div className="mt-3 max-h-44 space-y-2 overflow-y-auto">
+                        {availableMembers.map((person) => {
+                          const checked = selectedMembers.includes(String(person._id));
+                          return (
+                            <label key={person._id} className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 ${checked ? "border-slate-950 bg-slate-50" : "border-slate-200"}`}>
+                              <input type="checkbox" checked={checked} onChange={() => setSelectedMembers((prev) => checked ? prev.filter((id) => id !== String(person._id)) : [...prev, String(person._id)])} />
+                              <Avatar src={person.profile_picture} size="sm" alt={person.full_name} />
+                              <div>
+                                <p className="font-medium text-slate-900">{person.full_name}</p>
+                                <p className="text-sm text-slate-500">@{person.username}</p>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <button disabled={groupActionLoading || !selectedMembers.length} onClick={addMembers} className="mt-3 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                        Add selected members
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <button disabled={groupActionLoading} onClick={handleLeaveGroup} className="mt-6 w-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                Leave group
+              </button>
+            </div>
           </div>
         </div>
       )}

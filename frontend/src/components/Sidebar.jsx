@@ -7,6 +7,7 @@ import {
   CirclePlus,
   LogOut,
   Clapperboard,
+  BellRing,
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import { selectTotalUnread } from "../features/messagesWS/chatSelectors";
@@ -17,6 +18,7 @@ const menuItems = [
   { to: "/app", label: "Feed", Icon: Home },
   { to: "/app/reels", label: "Reels", Icon: Clapperboard },
   { to: "/app/messages", label: "Messages", Icon: MessageCircle },
+  { to: "/app/notifications", label: "Notifications", Icon: BellRing },
   { to: "/app/connections", label: "People", Icon: Users },
   { to: "/app/profile", label: "Profile", Icon: UserIcon },
 ];
@@ -26,6 +28,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   const { logout } = useAuth();
   const user = useSelector((state) => state.user.value);
   const unreadChats = useSelector(selectTotalUnread);
+  const unreadNotifications = useSelector((state) => state.notifications.unreadCount);
 
   return (
     <div
@@ -38,7 +41,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
         <div className="mx-6 rounded-3xl border border-lime-300/20 bg-gradient-to-br from-lime-300/10 via-cyan-400/5 to-fuchsia-400/10 p-4 mb-6">
           <p className="text-xs uppercase tracking-[0.28em] text-lime-200/70">Today on BuzzMitra</p>
-          <h2 className="mt-2 text-xl font-semibold leading-tight">Catch up on people you follow, jump into chats, and discover what is trending.</h2>
+          <h2 className="mt-2 text-xm font-semibold leading-tight">Catch up on people you follow, jump into chats, and discover what is trending.</h2>
         </div>
 
         <div className="px-4 space-y-2">
@@ -59,6 +62,11 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
               {item.label === "Messages" && unreadChats > 0 && (
                 <span className="absolute right-3 bg-lime-300 text-slate-950 text-xs font-bold px-2 py-1 rounded-full">
                   {unreadChats}
+                </span>
+              )}
+              {item.label === "Notifications" && unreadNotifications > 0 && (
+                <span className="absolute right-3 bg-cyan-300 text-slate-950 text-xs font-bold px-2 py-1 rounded-full">
+                  {unreadNotifications}
                 </span>
               )}
             </NavLink>

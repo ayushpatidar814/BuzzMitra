@@ -11,7 +11,7 @@ export const protect = async (req, res, next) => {
     }
 
     const payload = verifyAuthToken(token);
-    const user = await User.findById(payload.sub);
+    const user = await User.findById(payload.sub).select("_id");
 
     if (!user) {
       return res.status(401).json({ success: false, message: "Unauthorized" });

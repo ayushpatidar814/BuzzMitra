@@ -1,21 +1,25 @@
-import React, { useEffect } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Login from "./pages/Login";
 import Feed from "./pages/Feed";
-import Connections from "./pages/Connections";
-import Profile from "./pages/Profile";
-import CreatePost from "./pages/CreatePost";
 import Layout from "./pages/Layout";
-import MessageWS from "./pages/messageWS/MessageWS";
-import ChatBox from "./pages/messageWS/ChatBox";
 import SocketProvider from "./socket/SocketProvider";
 import { Toaster } from "react-hot-toast";
 import { useAuth } from "./auth/AuthProvider";
-import Reels from "./pages/Reels";
 import Loading from "./components/Loading";
 import { useSelector } from "react-redux";
 import PublicFeed from "./pages/PublicFeed";
-import PublicReels from "./pages/PublicReels";
+
+const Reels = lazy(() => import("./pages/Reels"));
+const Connections = lazy(() => import("./pages/Connections"));
+const Profile = lazy(() => import("./pages/Profile"));
+const CreatePost = lazy(() => import("./pages/CreatePost"));
+const MessageWS = lazy(() => import("./pages/messageWS/MessageWS"));
+const ChatBox = lazy(() => import("./pages/messageWS/ChatBox"));
+const PublicReels = lazy(() => import("./pages/PublicReels"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+
+const LazyPage = ({ children }) => <Suspense fallback={<Loading />}>{children}</Suspense>;
 
 const ProtectedApp = ({ isAuthenticated, user, children }) => {
   const location = useLocation();
@@ -65,18 +69,19 @@ const App = () => {
         <Routes>
           <Route path="/oauth/callback" element={<OAuthCallback />} />
           <Route path="/" element={isAuthenticated ? <Navigate to="/app" replace /> : <PublicFeed />} />
-          <Route path="/public-reels" element={isAuthenticated ? <Navigate to="/app/reels" replace /> : <PublicReels />} />
+          <Route path="/public-reels" element={isAuthenticated ? <Navigate to="/app/reels" replace /> : <LazyPage><PublicReels /></LazyPage>} />
           <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/app" replace />} />
           <Route path="/app" element={<ProtectedApp isAuthenticated={isAuthenticated} user={user}><Layout /></ProtectedApp>}>
             <Route index element={<Feed />} />
-            <Route path="reels" element={<Reels />} />
-            <Route path="connections" element={<Connections />} />
+            <Route path="reels" element={<LazyPage><Reels /></LazyPage>} />
+            <Route path="connections" element={<LazyPage><Connections /></LazyPage>} />
             <Route path="discover" element={<Navigate to="/app/connections" replace />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="profile/:profileId" element={<Profile />} />
-            <Route path="create-post" element={<CreatePost />} />
-            <Route path="messages" element={<MessageWS />} />
-            <Route path="messages/:chatId" element={<ChatBox />} />
+            <Route path="profile" element={<LazyPage><Profile /></LazyPage>} />
+            <Route path="profile/:profileId" element={<LazyPage><Profile /></LazyPage>} />
+            <Route path="create-post" element={<LazyPage><CreatePost /></LazyPage>} />
+            <Route path="messages" element={<LazyPage><MessageWS /></LazyPage>} />
+            <Route path="messages/:chatId" element={<LazyPage><ChatBox /></LazyPage>} />
+            <Route path="notifications" element={<LazyPage><Notifications /></LazyPage>} />
           </Route>
         </Routes>
       </SocketProvider>

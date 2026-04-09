@@ -1,8 +1,7 @@
-import fs from "fs";
 import crypto from "crypto";
+import mongoose from "mongoose";
 import Follow from "../models/Follow.js";
 import User from "../models/User.js";
-import imagekit from "../configs/imagekit.js";
 import Post from "../models/Post.js";
 import { enrichPost, enrichPosts } from "./postController.js";
 import {
@@ -11,10 +10,15 @@ import {
   signAuthToken,
   verifyPassword,
 } from "../utils/auth.js";
-import { serializeUser } from "../utils/serialize.js";
+import { buildCacheKey, deleteCacheByPrefix, getCache, setCache } from "../utils/cache.js";
+import { uploadOptimizedMedia } from "../utils/media.js";
+import { isValidEmail, isValidObjectId, parseBoundedInteger, trimString } from "../utils/request.js";
+import { ok, paginated } from "../utils/response.js";
+import { createNotification } from "../services/notification.service.js";
+import { serializeAuthUser, serializeUserProfile, serializeUserSummary } from "../utils/serialize.js";
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-const USER_SUMMARY_FIELDS = "email full_name username bio profile_picture cover_photo location followers_count following_count account_visibility role preferences createdAt updatedAt";
+const USER_SUMMARY_FIELDS = "full_name username bio profile_picture cover_photo location followers_count following_count account_visibility role preferences createdAt updatedAt";
 
 const normalizeBaseUrl = (value = "") => String(value || "").replace(/\/+$/, "");
 
@@ -35,23 +39,7 @@ const getOAuthCallbackUrl = (req, provider) => `${getBackendBaseUrl(req)}/api/us
 const redirectOAuthFailure = (res, reason = "failed") =>
   res.redirect(`${getFrontendBaseUrl()}/login?oauth=${encodeURIComponent(reason)}`);
 
-const uploadAsset = async (file, folder, width) => {
-  const buffer = fs.readFileSync(file.path);
-  const response = await imagekit.upload({
-    file: buffer,
-    fileName: file.originalname,
-    folder,
-  });
-
-  return imagekit.url({
-    path: response.filePath,
-    transformation: [
-      { quality: "auto" },
-      { format: "webp" },
-      ...(width ? [{ width: String(width) }] : []),
-    ],
-  });
-};
+const uploadAsset = async (file, folder) => (await uploadOptimizedMedia(file, folder, file.originalname)).url;
 
 const ensureUniqueUsername = async (base) => {
   const seed = createUsernameFromIdentity(base);
@@ -69,21 +57,29 @@ const ensureUniqueUsername = async (base) => {
 const attachFollowIds = async (userDoc) => {
   if (!userDoc) return null;
   const user = userDoc.toObject?.() || { ...userDoc };
-  const [followingEdges, followerEdges] = await Promise.all([
+  const [followingEdges, followerEdges, followingCount, followersCount] = await Promise.all([
     Follow.find({ followerId: user._id }).select("followingId").lean(),
     Follow.find({ followingId: user._id }).select("followerId").lean(),
+    Follow.countDocuments({ followerId: user._id }),
+    Follow.countDocuments({ followingId: user._id }),
   ]);
 
   user.following = followingEdges.map((edge) => String(edge.followingId));
   user.followers = followerEdges.map((edge) => String(edge.followerId));
-  user.following_count = typeof user.following_count === "number" ? user.following_count : user.following.length;
-  user.followers_count = typeof user.followers_count === "number" ? user.followers_count : user.followers.length;
+  user.following_count = followingCount;
+  user.followers_count = followersCount;
+  if (userDoc.following_count !== followingCount || userDoc.followers_count !== followersCount) {
+    User.updateOne(
+      { _id: user._id },
+      { $set: { following_count: followingCount, followers_count: followersCount } }
+    ).catch(() => {});
+  }
   return user;
 };
 
 const serializeListedUsers = (users = []) =>
   users.map((userDoc) =>
-    serializeUser({
+    serializeUserSummary({
       ...(userDoc.toObject?.() || userDoc),
       followers: [],
       following: [],
@@ -96,33 +92,75 @@ const issueAuthResponse = (res, user, message = "Authenticated") => {
     success: true,
     message,
     token,
-    user: serializeUser(user),
+    user: serializeAuthUser(user),
   });
 };
 
+const encodeListCursor = (item) =>
+  item
+    ? Buffer.from(
+        JSON.stringify({
+          createdAt: item.createdAt,
+          id: String(item._id),
+        })
+      ).toString("base64")
+    : null;
+
+const decodeListCursor = (cursor) => {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64").toString("utf8"));
+    if (!parsed?.createdAt || !parsed?.id) return null;
+    return {
+      createdAt: new Date(parsed.createdAt),
+      id: new mongoose.Types.ObjectId(parsed.id),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const buildCursorMatch = (cursor) => {
+  if (!cursor) return {};
+  return {
+    $or: [
+      { createdAt: { $lt: cursor.createdAt } },
+      { createdAt: cursor.createdAt, _id: { $lt: cursor.id } },
+    ],
+  };
+};
+
+const getResolvedProfileId = (req) => String(req.params.profileId || req.body.profileId || req.userId);
+
 export const registerUser = async (req, res) => {
   try {
-    const { email, password, full_name, username } = req.body;
+    const email = String(req.body.email || "").toLowerCase().trim();
+    const password = String(req.body.password || "");
+    const full_name = trimString(req.body.full_name, { maxLength: 80 });
+    const username = trimString(req.body.username, { maxLength: 30 });
 
     if (!email || !password || !full_name) {
       return res.status(400).json({ success: false, message: "Email, password and full name are required" });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, message: "Enter a valid email address" });
     }
 
     if (password.length < 8) {
       return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const existingUser = await User.findOne({ email: normalizedEmail });
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(409).json({ success: false, message: "An account already exists with this email" });
     }
 
-    const uniqueUsername = await ensureUniqueUsername(username || normalizedEmail.split("@")[0]);
+    const uniqueUsername = await ensureUniqueUsername(username || email.split("@")[0]);
     const { salt, passwordHash } = createPasswordHash(password);
 
     const user = await User.create({
-      email: normalizedEmail,
+      email,
       full_name,
       username: uniqueUsername,
       password_hash: passwordHash,
@@ -139,8 +177,14 @@ export const registerUser = async (req, res) => {
 
 export const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email: email?.toLowerCase().trim() });
+    const email = String(req.body.email || "").toLowerCase().trim();
+    const password = String(req.body.password || "");
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password are required" });
+    }
+
+    const user = await User.findOne({ email }).select("+password_hash +password_salt");
     
     if (!user || !verifyPassword(password || "", user.password_salt, user.password_hash)) {
       return res.status(401).json({ success: false, message: "Invalid email or password" });
@@ -312,7 +356,7 @@ export const getUserData = async (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
-    return res.json({ success: true, user: serializeUser(await attachFollowIds(user)) });
+    return res.json({ success: true, user: serializeAuthUser(await attachFollowIds(user)) });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: error.message });
@@ -326,6 +370,19 @@ export const updatedUserData = async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    username = trimString(username, { maxLength: 30 });
+    bio = trimString(bio, { maxLength: 180 });
+    location = trimString(location, { maxLength: 80 });
+    full_name = trimString(full_name, { maxLength: 80 });
+
+    if (account_visibility && !["public", "private"].includes(account_visibility)) {
+      return res.status(400).json({ success: false, message: "Invalid account visibility" });
+    }
+
+    if (role && !["user", "creator", "brand"].includes(role)) {
+      return res.status(400).json({ success: false, message: "Invalid account role" });
     }
 
     if (username && username !== user.username) {
@@ -346,16 +403,23 @@ export const updatedUserData = async (req, res) => {
     const cover = req.files?.cover?.[0];
 
     if (profile) {
-      user.profile_picture = await uploadAsset(profile, "profiles", 512);
+      user.profile_picture = await uploadAsset(profile, "profiles");
     }
 
     if (cover) {
-      user.cover_photo = await uploadAsset(cover, "covers", 1280);
+      user.cover_photo = await uploadAsset(cover, "covers");
     }
 
     await user.save();
+    await Promise.all([
+      deleteCacheByPrefix(`cache:profile:${String(user._id)}`),
+      deleteCacheByPrefix(`cache:profile-content:${String(user._id)}`),
+      deleteCacheByPrefix(`cache:profile-connections:${String(user._id)}`),
+      deleteCacheByPrefix("cache:feed:public"),
+      deleteCacheByPrefix("cache:reels:public"),
+    ]);
 
-    return res.json({ success: true, user: serializeUser(await attachFollowIds(user)), message: "Profile updated successfully" });
+    return res.json({ success: true, user: serializeAuthUser(await attachFollowIds(user)), message: "Profile updated successfully" });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: error.message });
@@ -364,8 +428,7 @@ export const updatedUserData = async (req, res) => {
 
 export const discoverUsers = async (req, res) => {
   try {
-    const { input = "" } = req.body;
-    const trimmed = input.trim();
+    const trimmed = trimString(req.body.input, { maxLength: 80 });
     const baseQuery = { _id: { $ne: req.userId } };
     const allUsers = trimmed
       ? await User.find(
@@ -379,7 +442,7 @@ export const discoverUsers = async (req, res) => {
           .limit(24)
       : await User.find(baseQuery).sort({ followers_count: -1, createdAt: -1 }).limit(24);
 
-    return res.json({ success: true, users: serializeListedUsers(allUsers) });
+    return ok(res, { data: { users: serializeListedUsers(allUsers) }, users: serializeListedUsers(allUsers) });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: error.message });
@@ -389,6 +452,9 @@ export const discoverUsers = async (req, res) => {
 export const followUser = async (req, res) => {
   try {
     const { id } = req.body;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid follow target" });
+    }
     if (!id || String(id) === String(req.userId)) {
       return res.status(400).json({ success: false, message: "Invalid follow target" });
     }
@@ -404,7 +470,21 @@ export const followUser = async (req, res) => {
       await Promise.all([
         User.updateOne({ _id: req.userId }, { $inc: { following_count: 1 } }),
         User.updateOne({ _id: id }, { $inc: { followers_count: 1 } }),
+        deleteCacheByPrefix(`cache:profile:${String(req.userId)}`),
+        deleteCacheByPrefix(`cache:profile:${String(id)}`),
+        deleteCacheByPrefix(`cache:profile-connections:${String(req.userId)}`),
+        deleteCacheByPrefix(`cache:profile-connections:${String(id)}`),
       ]);
+      await createNotification({
+        recipientId: id,
+        actorId: req.userId,
+        type: "follow",
+        title: "New follower",
+        text: `${user.full_name} started following you.`,
+        link: `/app/profile/${req.userId}`,
+        entityType: "profile",
+        entityId: req.userId,
+      });
     }
 
     return res.json({ success: true, message: "You are following this user" });
@@ -417,6 +497,9 @@ export const followUser = async (req, res) => {
 export const unfollowUser = async (req, res) => {
   try {
     const { id } = req.body;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid follow target" });
+    }
     const [user, target] = await Promise.all([User.findById(req.userId), User.findById(id)]);
 
     if (!user || !target) {
@@ -428,6 +511,10 @@ export const unfollowUser = async (req, res) => {
       await Promise.all([
         User.updateOne({ _id: req.userId }, { $inc: { following_count: -1 } }),
         User.updateOne({ _id: id }, { $inc: { followers_count: -1 } }),
+        deleteCacheByPrefix(`cache:profile:${String(req.userId)}`),
+        deleteCacheByPrefix(`cache:profile:${String(id)}`),
+        deleteCacheByPrefix(`cache:profile-connections:${String(req.userId)}`),
+        deleteCacheByPrefix(`cache:profile-connections:${String(id)}`),
       ]);
     }
 
@@ -448,11 +535,12 @@ export const getUserConnections = async (req, res) => {
     const followers = serializeListedUsers(followersEdges.map((edge) => edge.followerId).filter(Boolean));
     const following = serializeListedUsers(followingEdges.map((edge) => edge.followingId).filter(Boolean));
 
-    return res.json({
-      success: true,
+    const network = Array.from(new Map([...followers, ...following].map((item) => [String(item._id), item])).values());
+    return ok(res, {
+      data: { followers, following, network },
       followers,
       following,
-      network: Array.from(new Map([...followers, ...following].map((item) => [String(item._id), item])).values()),
+      network,
     });
   } catch (error) {
     console.log(error);
@@ -462,38 +550,179 @@ export const getUserConnections = async (req, res) => {
 
 export const getUserProfiles = async (req, res) => {
   try {
-    const { profileId } = req.body;
-    const profile = await User.findById(profileId || req.userId);
+    const resolvedProfileId = getResolvedProfileId(req);
+    const viewerId = String(req.userId);
+
+    if (!isValidObjectId(resolvedProfileId)) {
+      return res.status(400).json({ success: false, message: "Invalid profile id" });
+    }
+
+    const cacheKey = buildCacheKey("cache", "profile", resolvedProfileId, `viewer=${viewerId}`);
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const profile = await User.findById(resolvedProfileId);
     if (!profile) {
       return res.status(404).json({ success: false, message: "Profile not found" });
     }
 
-    const [posts, reels, followersEdges, followingEdges] = await Promise.all([
-      Post.find({ user: profile._id, is_reel: false }).populate("user").sort({ createdAt: -1 }),
-      Post.find({ user: profile._id, is_reel: true }).populate("user").sort({ createdAt: -1 }),
-      Follow.find({ followingId: profile._id }).sort({ createdAt: -1 }).populate("followerId", USER_SUMMARY_FIELDS).lean(),
-      Follow.find({ followerId: profile._id }).sort({ createdAt: -1 }).populate("followingId", USER_SUMMARY_FIELDS).lean(),
+    const [posts, reels, followersPreviewEdges, followingPreviewEdges] = await Promise.all([
+      Post.find({ user: profile._id, is_reel: false }).populate("user", "full_name username profile_picture").sort({ createdAt: -1 }).limit(12),
+      Post.find({ user: profile._id, is_reel: true }).populate("user", "full_name username profile_picture").sort({ createdAt: -1 }).limit(9),
+      Follow.find({ followingId: profile._id }).sort({ createdAt: -1 }).limit(8).populate("followerId", USER_SUMMARY_FIELDS).lean(),
+      Follow.find({ followerId: profile._id }).sort({ createdAt: -1 }).limit(8).populate("followingId", USER_SUMMARY_FIELDS).lean(),
     ]);
     const enrichedPosts = await enrichPosts(posts, req.userId);
     const enrichedReels = await enrichPosts(reels, req.userId);
     const hydratedProfile = await attachFollowIds(profile);
-    const followers = serializeListedUsers(followersEdges.map((edge) => edge.followerId).filter(Boolean));
-    const following = serializeListedUsers(followingEdges.map((edge) => edge.followingId).filter(Boolean));
+    const followers = serializeListedUsers(followersPreviewEdges.map((edge) => edge.followerId).filter(Boolean));
+    const following = serializeListedUsers(followingPreviewEdges.map((edge) => edge.followingId).filter(Boolean));
+    const stats = {
+      postCount: await Post.countDocuments({ user: profile._id, is_reel: false }),
+      reelCount: await Post.countDocuments({ user: profile._id, is_reel: true }),
+      totalContentCount: 0,
+      mediaCount: await Post.countDocuments({
+        user: profile._id,
+        is_reel: false,
+        $or: [{ media_type: "image" }, { image_urls: { $exists: true, $ne: [] } }],
+      }),
+    };
+    stats.totalContentCount = stats.postCount + stats.reelCount;
 
-    return res.json({
+    const payload = {
       success: true,
-      profile: serializeUser(hydratedProfile),
+      profile: serializeUserProfile(hydratedProfile, {
+        includeEmail: resolvedProfileId === viewerId,
+        includeRelations: resolvedProfileId === viewerId,
+      }),
       followers,
       following,
-      stats: {
-        postCount: enrichedPosts.length,
-        reelCount: enrichedReels.length,
-        totalContentCount: enrichedPosts.length + enrichedReels.length,
-        mediaCount: enrichedPosts.filter((post) => (post.image_urls || []).length > 0 || post.media_type === "image").length,
-      },
+      stats,
       posts: enrichedPosts,
       reels: enrichedReels,
+      postsHasMore: stats.postCount > enrichedPosts.length,
+      reelsHasMore: stats.reelCount > enrichedReels.length,
+      postsNextCursor: enrichedPosts.length ? encodeListCursor(posts[posts.length - 1]) : null,
+      reelsNextCursor: enrichedReels.length ? encodeListCursor(reels[reels.length - 1]) : null,
+      followersPreview: followers,
+      followingPreview: following,
+    };
+    await setCache(cacheKey, payload, 120);
+    return ok(res, payload);
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getProfileContent = async (req, res) => {
+  try {
+    const resolvedProfileId = getResolvedProfileId(req);
+    const viewerId = String(req.userId);
+    const type = String(req.query.type || "posts");
+    const cursor = decodeListCursor(req.query.cursor);
+    const limit = parseBoundedInteger(req.query.limit, {
+      defaultValue: type === "reels" ? 9 : 12,
+      min: 1,
+      max: type === "reels" ? 12 : 15,
     });
+
+    if (!isValidObjectId(resolvedProfileId)) {
+      return res.status(400).json({ success: false, message: "Invalid profile id" });
+    }
+
+    if (!["posts", "reels"].includes(type)) {
+      return res.status(400).json({ success: false, message: "Invalid content type" });
+    }
+
+    const profile = await User.findById(resolvedProfileId).select("_id");
+    if (!profile) {
+      return res.status(404).json({ success: false, message: "Profile not found" });
+    }
+
+    const cacheKey = buildCacheKey("cache", "profile-content", resolvedProfileId, type, `cursor=${req.query.cursor || "first"}`, `limit=${limit}`, `viewer=${viewerId}`);
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const items = await Post.find({
+      user: profile._id,
+      is_reel: type === "reels",
+      ...buildCursorMatch(cursor),
+    })
+      .populate("user", "full_name username profile_picture")
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1);
+
+    const hasMore = items.length > limit;
+    const pageItems = items.slice(0, limit);
+    const enriched = await enrichPosts(pageItems, viewerId);
+
+    const payload = {
+      message: "Profile content loaded",
+      items: enriched,
+      hasMore,
+      nextCursor: hasMore && pageItems.length ? encodeListCursor(pageItems[pageItems.length - 1]) : null,
+      itemKey: "items",
+    };
+    await setCache(cacheKey, { success: true, ...payload, data: { items: enriched, hasMore: payload.hasMore, nextCursor: payload.nextCursor }, meta: { hasMore: payload.hasMore, nextCursor: payload.nextCursor, count: enriched.length } }, 90);
+    return paginated(res, payload);
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getProfileConnectionsPage = async (req, res) => {
+  try {
+    const resolvedProfileId = getResolvedProfileId(req);
+    const type = String(req.query.type || "followers");
+    const cursor = decodeListCursor(req.query.cursor);
+    const limit = parseBoundedInteger(req.query.limit, { defaultValue: 20, min: 1, max: 40 });
+
+    if (!isValidObjectId(resolvedProfileId)) {
+      return res.status(400).json({ success: false, message: "Invalid profile id" });
+    }
+
+    if (!["followers", "following"].includes(type)) {
+      return res.status(400).json({ success: false, message: "Invalid connection type" });
+    }
+
+    const edgeFilter =
+      type === "followers"
+        ? { followingId: resolvedProfileId, ...buildCursorMatch(cursor) }
+        : { followerId: resolvedProfileId, ...buildCursorMatch(cursor) };
+
+    const cacheKey = buildCacheKey("cache", "profile-connections", resolvedProfileId, type, `cursor=${req.query.cursor || "first"}`, `limit=${limit}`);
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    const edges = await Follow.find(edgeFilter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1)
+      .populate(type === "followers" ? "followerId" : "followingId", USER_SUMMARY_FIELDS)
+      .lean();
+
+    const hasMore = edges.length > limit;
+    const pageEdges = edges.slice(0, limit);
+    const users = serializeListedUsers(
+      pageEdges.map((edge) => (type === "followers" ? edge.followerId : edge.followingId)).filter(Boolean)
+    );
+
+    const payload = {
+      message: "Profile connections loaded",
+      items: users,
+      hasMore,
+      nextCursor: hasMore && pageEdges.length ? encodeListCursor(pageEdges[pageEdges.length - 1]) : null,
+      itemKey: "users",
+    };
+    await setCache(cacheKey, { success: true, ...payload, users, data: { items: users, hasMore: payload.hasMore, nextCursor: payload.nextCursor }, meta: { hasMore: payload.hasMore, nextCursor: payload.nextCursor, count: users.length } }, 60);
+    return paginated(res, payload);
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: error.message });

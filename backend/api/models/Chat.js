@@ -57,5 +57,8 @@ const chatSchema = new mongoose.Schema(
 
 chatSchema.index({ participants: 1, isGroup: 1 });
 chatSchema.index({ isGroup: 1, updatedAt: -1 });
+chatSchema.index({ participants: 1, updatedAt: -1 });
+chatSchema.index({ lastMessage: 1 });
+chatSchema.index({ "clearedBy.userId": 1, updatedAt: -1 });
 
 export default mongoose.model("Chat", chatSchema);

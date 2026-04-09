@@ -21,7 +21,7 @@ const PublicReels = () => {
   const fetchReels = useCallback(async (append = false, nextCursor = null) => {
     try {
       setLoadingMore(true);
-      const { data } = await api.get("/api/post/reels/public", {
+      const { data } = await api.getDedup("/api/post/reels/public", {
         params: { ...(nextCursor ? { cursor: nextCursor } : {}) },
       });
       if (data.success) {

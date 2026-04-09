@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronDown,
   Eye,
   Heart,
   MessageCircle,
@@ -25,6 +24,9 @@ const Reels = () => {
   const navigate = useNavigate();
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [cursor, setCursor] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
   const [muted, setMuted] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -36,24 +38,51 @@ const Reels = () => {
   const cardRefs = useRef([]);
   const videoRefs = useRef([]);
   const viewedRef = useRef(new Set());
+  const watchSessionRef = useRef({ reelId: null, startedAt: 0 });
 
   const activeReel = reels[activeIndex] || null;
   const isOwnReel = activeReel?.user?._id && String(activeReel.user._id) === String(currentUser?._id);
 
-  const fetchReels = useCallback(async () => {
+  const fetchReels = useCallback(async (append = false, nextCursor = null) => {
     try {
-      setLoading(true);
-      const { data } = await api.get("/api/post/reels/feed", { headers: authHeaders });
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      const { data } = await api.getDedup("/api/post/reels/feed", {
+        headers: authHeaders,
+        params: { limit: 6, ...(nextCursor ? { cursor: nextCursor } : {}) },
+      });
       if (data.success) {
-        setReels(data.reels || []);
+        setReels((prev) => {
+          const incoming = data.reels || [];
+          if (!append) return incoming;
+          const merged = [...prev];
+          const knownIds = new Set(prev.map((item) => item._id));
+          incoming.forEach((item) => {
+            if (!knownIds.has(item._id)) {
+              merged.push(item);
+            }
+          });
+          return merged;
+        });
+        setCursor(data.nextCursor || null);
+        setHasMore(Boolean(data.hasMore));
+        return (data.reels || []).length;
       } else {
         toast.error(data.message);
       }
     } catch (error) {
       toast.error(error.message);
     } finally {
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
+    return 0;
   }, [authHeaders]);
 
   const replaceReel = useCallback((nextReel) => {
@@ -82,10 +111,42 @@ const Reels = () => {
     [authHeaders]
   );
 
+  const flushWatchTime = useCallback(
+    async (resetSession = true) => {
+      const currentSession = watchSessionRef.current;
+      if (!currentSession.reelId || !currentSession.startedAt) return;
+
+      const watchedSeconds = Math.min(
+        45,
+        Math.max(0, Math.round((Date.now() - currentSession.startedAt) / 1000))
+      );
+
+      if (resetSession) {
+        watchSessionRef.current = { reelId: null, startedAt: 0 };
+      }
+
+      if (watchedSeconds < 2) return;
+
+      try {
+        await api.post(
+          "/api/post/reels/watch-time",
+          { postId: currentSession.reelId, watchedSeconds },
+          { headers: authHeaders }
+        );
+      } catch {
+        // Watch time is a best-effort signal for recommendations.
+      }
+    },
+    [authHeaders]
+  );
+
   useEffect(() => {
+    setCursor(null);
+    setHasMore(true);
     setActiveIndex(0);
     viewedRef.current.clear();
-    fetchReels();
+    watchSessionRef.current = { reelId: null, startedAt: 0 };
+    fetchReels(false, null);
   }, [fetchReels]);
 
   useEffect(() => {
@@ -102,6 +163,22 @@ const Reels = () => {
       }
     });
   }, [activeIndex, muted, reels, trackView]);
+
+  useEffect(() => {
+    const nextReelId = reels[activeIndex]?._id;
+    if (!nextReelId) return;
+
+    if (watchSessionRef.current.reelId && watchSessionRef.current.reelId !== nextReelId) {
+      flushWatchTime();
+    }
+
+    if (watchSessionRef.current.reelId !== nextReelId || !watchSessionRef.current.startedAt) {
+      watchSessionRef.current = {
+        reelId: nextReelId,
+        startedAt: Date.now(),
+      };
+    }
+  }, [activeIndex, flushWatchTime, reels]);
 
   useEffect(() => {
     if (!streamRef.current) return;
@@ -138,12 +215,58 @@ const Reels = () => {
     setReplyingTo(null);
   }, [activeIndex]);
 
-  const handleEnded = useCallback(() => {
+  useEffect(() => {
+    if (!hasMore || loadingMore || activeIndex < reels.length - 3) return;
+    fetchReels(true, cursor);
+  }, [activeIndex, cursor, fetchReels, hasMore, loadingMore, reels.length]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        flushWatchTime();
+        videoRefs.current[activeIndex]?.pause();
+      } else if (videoRefs.current[activeIndex]) {
+        watchSessionRef.current = {
+          reelId: reels[activeIndex]?._id || null,
+          startedAt: Date.now(),
+        };
+        videoRefs.current[activeIndex]?.play().catch(() => {});
+      }
+    };
+
+    const onBeforeUnload = () => {
+      flushWatchTime();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("beforeunload", onBeforeUnload);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [activeIndex, flushWatchTime, reels]);
+
+  useEffect(() => () => {
+    flushWatchTime();
+  }, [flushWatchTime]);
+
+  const handleEnded = useCallback(async () => {
+    await flushWatchTime();
     const nextIndex = activeIndex + 1;
     if (nextIndex < reels.length) {
       scrollToReel(nextIndex);
+      return;
     }
-  }, [activeIndex, reels.length, scrollToReel]);
+    if (hasMore && !loadingMore) {
+      const appended = await fetchReels(true, cursor);
+      if (appended) {
+        setTimeout(() => {
+          scrollToReel(nextIndex);
+        }, 180);
+      }
+    }
+  }, [activeIndex, cursor, fetchReels, flushWatchTime, hasMore, loadingMore, reels.length, scrollToReel]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -438,7 +561,7 @@ const Reels = () => {
                     src={reel.media_url}
                     muted={muted}
                     playsInline
-                    preload={index <= activeIndex + 1 ? "auto" : "metadata"}
+                    preload={index <= activeIndex + 2 ? "auto" : "metadata"}
                     onEnded={index === activeIndex ? handleEnded : undefined}
                     className="h-full w-full object-cover"
                   />
@@ -543,6 +666,14 @@ const Reels = () => {
             </section>
           );
         })}
+
+        {loadingMore && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-24 z-20 flex justify-center">
+            <div className="rounded-full border border-white/10 bg-black/45 px-4 py-2 text-xs text-white/75 backdrop-blur">
+              Loading more reels...
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 px-4 lg:hidden">

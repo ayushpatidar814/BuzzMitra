@@ -1,17 +1,19 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
-import StoryModel from './StoryModel'
-import StoryViewer from './StoryViewer'
 import api from '../api/axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../auth/AuthProvider'
 import Avatar from './Avatar'
 
-const StoriesBar = () => {
+const StoryModel = lazy(() => import('./StoryModel'))
+const StoryViewer = lazy(() => import('./StoryViewer'))
+
+const StoriesBar = ({ initialStories = null }) => {
   const { authHeaders } = useAuth()
-  const [stories, setStories] = useState([])
+  const [stories, setStories] = useState(initialStories || [])
   const [showModel, setShowModel] = useState(false)
   const [viewStory, setViewStory] = useState(null)
+  const bootstrappedRef = useRef(Boolean(initialStories))
 
   const fetchStories = useCallback(async () => {
     try {
@@ -27,6 +29,17 @@ const StoriesBar = () => {
   }, [authHeaders])
 
   useEffect(() => {
+    if (initialStories) {
+      setStories(initialStories)
+      bootstrappedRef.current = true
+    }
+  }, [initialStories])
+
+  useEffect(() => {
+    if (bootstrappedRef.current) {
+      bootstrappedRef.current = false
+      return
+    }
     fetchStories()
   }, [fetchStories])
 
@@ -71,8 +84,16 @@ const StoriesBar = () => {
         )})}
       </div>
 
-      { showModel && <StoryModel setShowModel={setShowModel} fetchStories={fetchStories} />}
-      { viewStory && <StoryViewer viewStory={viewStory} setViewStory={setViewStory} storyGroups={stories} />}
+      { showModel && (
+        <Suspense fallback={null}>
+          <StoryModel setShowModel={setShowModel} fetchStories={fetchStories} />
+        </Suspense>
+      )}
+      { viewStory && (
+        <Suspense fallback={null}>
+          <StoryViewer viewStory={viewStory} setViewStory={setViewStory} storyGroups={stories} />
+        </Suspense>
+      )}
     </div>
   )
 }

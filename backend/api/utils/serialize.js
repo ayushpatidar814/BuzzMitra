@@ -5,26 +5,44 @@ const normalizeRelation = (value) => {
   return String(value);
 };
 
-export const serializeUser = (user) => ({
+const buildPreferences = (preferences = {}) => ({
+  reel_categories: preferences.reel_categories || [],
+  reel_subcategories: preferences.reel_subcategories || [],
+  target_audiences: preferences.target_audiences || [],
+});
+
+export const serializeUserSummary = (user) => ({
   _id: String(user._id),
-  email: user.email,
   full_name: user.full_name,
   username: user.username,
-  bio: user.bio,
   profile_picture: user.profile_picture,
-  cover_photo: user.cover_photo,
-  location: user.location,
-  followers: (user.followers || []).map(normalizeRelation),
-  following: (user.following || []).map(normalizeRelation),
-  followers_count: typeof user.followers_count === "number" ? user.followers_count : (user.followers || []).length,
-  following_count: typeof user.following_count === "number" ? user.following_count : (user.following || []).length,
+  bio: user.bio || "",
+  location: user.location || "",
   account_visibility: user.account_visibility || "public",
   role: user.role || "user",
-  preferences: user.preferences || {
-    reel_categories: [],
-    reel_subcategories: [],
-    target_audiences: [],
-  },
+  followers_count:
+    typeof user.followers_count === "number" ? user.followers_count : (user.followers || []).length,
+  following_count:
+    typeof user.following_count === "number" ? user.following_count : (user.following || []).length,
+});
+
+export const serializeUserProfile = (user, { includeEmail = false, includeRelations = false } = {}) => ({
+  ...serializeUserSummary(user),
+  ...(includeEmail ? { email: user.email } : {}),
+  cover_photo: user.cover_photo || "",
+  preferences: buildPreferences(user.preferences),
+  ...(includeRelations
+    ? {
+        followers: (user.followers || []).map(normalizeRelation),
+        following: (user.following || []).map(normalizeRelation),
+      }
+    : {}),
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
+
+export const serializeAuthUser = (user) =>
+  serializeUserProfile(user, {
+    includeEmail: true,
+    includeRelations: true,
+  });

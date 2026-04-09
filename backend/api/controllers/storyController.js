@@ -1,12 +1,13 @@
-import fs from "fs";
 import crypto from "crypto";
-import imagekit from "../configs/imagekit.js";
 import Follow from "../models/Follow.js";
 import Story from "../models/Story.js";
 import StoryView from "../models/StoryView.js";
 import { saveMessage } from "../services/message.service.js";
 import { getIO, onlineUsers } from "../sockets/index.js";
 import Chat from "../models/Chat.js";
+import { uploadOptimizedMedia } from "../utils/media.js";
+import { isValidObjectId, parseBoundedInteger, trimString } from "../utils/request.js";
+import { createNotification } from "../services/notification.service.js";
 
 const getAccessibleStory = async (storyId, userId) => {
   const story = await Story.findOne({
@@ -43,20 +44,27 @@ const emitChatUpdates = async (message) => {
   }
 };
 
-const uploadStoryMedia = async (media) => {
-  const fileBuffer = fs.readFileSync(media.path);
-  const response = await imagekit.upload({
-    file: fileBuffer,
-    fileName: media.originalname,
-    folder: "stories",
-  });
-  return response.url;
-};
+const uploadStoryMedia = async (media) => (await uploadOptimizedMedia(media, "stories", media.originalname)).url;
 
 export const addUserStory = async (req, res) => {
   try {
-    const { content = "", media_type, background_color = "#111827", duration_ms = 8000 } = req.body;
+    const content = trimString(req.body.content, { maxLength: 600 });
+    const media_type = String(req.body.media_type || "");
+    const background_color = trimString(req.body.background_color || "#111827", { maxLength: 20 }) || "#111827";
+    const duration_ms = parseBoundedInteger(req.body.duration_ms, { defaultValue: 8000, min: 1000, max: 15000 });
     const media = req.file;
+
+    if (!["text", "image", "video"].includes(media_type)) {
+      return res.status(400).json({ success: false, message: "Invalid story type" });
+    }
+
+    if (media_type === "text" && !content) {
+      return res.status(400).json({ success: false, message: "Text story content is required" });
+    }
+
+    if ((media_type === "image" || media_type === "video") && !media) {
+      return res.status(400).json({ success: false, message: "Media is required for this story" });
+    }
 
     let media_url = "";
     if ((media_type === "image" || media_type === "video") && media) {
@@ -73,7 +81,11 @@ export const addUserStory = async (req, res) => {
       expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
     });
 
-    return res.json({ success: true, story: await story.populate("user"), message: "Story created successfully" });
+    return res.json({
+      success: true,
+      story: await story.populate("user", "full_name username profile_picture"),
+      message: "Story created successfully",
+    });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: error.message });
@@ -89,7 +101,7 @@ export const getStories = async (req, res) => {
       user: { $in: userIds },
       expires_at: { $gt: new Date() },
     })
-      .populate("user")
+      .populate("user", "full_name username profile_picture")
       .sort({ createdAt: -1 });
 
     const groupedStories = [];
@@ -125,6 +137,9 @@ export const getStories = async (req, res) => {
 export const viewStory = async (req, res) => {
   try {
     const { storyId } = req.body;
+    if (!isValidObjectId(storyId)) {
+      return res.status(400).json({ success: false, message: "Invalid story id" });
+    }
     const story = await getAccessibleStory(storyId, req.userId);
     if (!story) {
       return res.status(404).json({ success: false, message: "Story not found" });
@@ -149,6 +164,9 @@ export const viewStory = async (req, res) => {
 export const getStoryViewers = async (req, res) => {
   try {
     const { storyId } = req.params;
+    if (!isValidObjectId(storyId)) {
+      return res.status(400).json({ success: false, message: "Invalid story id" });
+    }
     const story = await Story.findOne({
       _id: storyId,
       user: req.userId,
@@ -183,8 +201,12 @@ export const getStoryViewers = async (req, res) => {
 
 export const replyToStory = async (req, res) => {
   try {
-    const { storyId, text = "" } = req.body;
-    const trimmedText = text.trim();
+    const { storyId } = req.body;
+    const trimmedText = trimString(req.body.text, { maxLength: 600 });
+
+    if (!isValidObjectId(storyId)) {
+      return res.status(400).json({ success: false, message: "Invalid story id" });
+    }
 
     if (!trimmedText) {
       return res.status(400).json({ success: false, message: "Reply text is required" });
@@ -205,6 +227,7 @@ export const replyToStory = async (req, res) => {
       messageId: crypto.randomUUID(),
       type: "text",
       text: `Replied: ${trimmedText}`,
+      suppressNotification: true,
       storyReply: {
         storyId: story._id,
         storyUserId: story.user._id,
@@ -215,6 +238,16 @@ export const replyToStory = async (req, res) => {
     });
 
     await emitChatUpdates(message);
+    await createNotification({
+      recipientId: story.user._id,
+      actorId: req.userId,
+      type: "story_reply",
+      title: "Story reply",
+      text: trimmedText.length > 72 ? `${trimmedText.slice(0, 72)}...` : trimmedText,
+      link: `/app/messages/${message.chatId}`,
+      entityType: "story",
+      entityId: story._id,
+    });
 
     return res.json({
       success: true,

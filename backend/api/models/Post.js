@@ -26,6 +26,8 @@ const postSchema = new mongoose.Schema({
     shares_count: { type: Number, default: 0 },
     saves_count: { type: Number, default: 0 },
     view_count: { type: Number, default: 0 },
+    watch_time_total: { type: Number, default: 0 },
+    watch_sessions_count: { type: Number, default: 0 },
 },{timestamps: true, minimize: false})
 
 postSchema.index({ createdAt: -1 });

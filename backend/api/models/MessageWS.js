@@ -110,5 +110,9 @@ const messageWSSchema = new mongoose.Schema({
 
 messageWSSchema.index({ chatId: 1, createdAt: -1 });
 messageWSSchema.index({ senderId: 1, receiverId: 1 });
+messageWSSchema.index({ receiverId: 1, createdAt: -1 });
+messageWSSchema.index({ senderId: 1, createdAt: -1 });
+messageWSSchema.index({ chatId: 1, messageId: 1 }, { unique: true });
+messageWSSchema.index({ chatId: 1, status: 1, createdAt: -1 });
 
 export default mongoose.model("MessageWS", messageWSSchema);

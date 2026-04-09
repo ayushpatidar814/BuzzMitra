@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
 import { useDispatch, useSelector } from "react-redux";
@@ -9,8 +9,8 @@ import { useSocket } from "../hooks/useSocket";
 import { useAuth } from "../auth/AuthProvider";
 import Avatar from "./Avatar";
 
-const RecentMessages = () => {
-  const [chats, setChats] = useState([]);
+const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) => {
+  const [chats, setChats] = useState(initialChats || []);
   const { authHeaders } = useAuth();
   const user = useSelector((state) => state.user.value);
   const dispatch = useDispatch();
@@ -18,6 +18,7 @@ const RecentMessages = () => {
   const socket = useSocket();
   const { perChat } = useSelector((state) => state.chatCount);
   const { network = [] } = useSelector((state) => state.connections);
+  const bootstrappedRef = useRef(Boolean(initialChats));
 
   const fetchRecentMessages = useCallback(async () => {
     try {
@@ -30,11 +31,23 @@ const RecentMessages = () => {
   }, [authHeaders]);
 
   useEffect(() => {
+    if (initialChats) {
+      setChats(initialChats);
+      bootstrappedRef.current = true;
+    }
+  }, [initialChats]);
+
+  useEffect(() => {
+    if (suspendInitialFetch) return;
     if (!user?._id) return;
-    fetchRecentMessages();
+    if (bootstrappedRef.current) {
+      bootstrappedRef.current = false;
+    } else {
+      fetchRecentMessages();
+    }
     const interval = setInterval(fetchRecentMessages, 20000);
     return () => clearInterval(interval);
-  }, [user?._id, fetchRecentMessages]);
+  }, [user?._id, fetchRecentMessages, suspendInitialFetch]);
 
   useEffect(() => {
     if (!socket || !user?._id) return;

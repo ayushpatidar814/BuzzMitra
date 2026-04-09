@@ -3,6 +3,7 @@ import Chat from "../models/Chat.js";
 import { saveMessage } from "../services/message.service.js";
 import { onlineUsers } from "../sockets/index.js";
 import MessageWS from "../models/MessageWS.js";
+import { emitBatched } from "../sockets/emitBatch.js";
 
 const buildUnreadChatsCount = (chats, userId) =>
   chats.filter((chat) => Number(chat.unreadCount?.[String(userId)] || 0) > 0).length;
@@ -39,9 +40,9 @@ export const startConsumer = async (io) => {
           : [String(saved.receiverId)];
 
         recipients.forEach((recipientId) => {
-          io.to(`user:${recipientId}`).emit("inbox_message", saved);
+          emitBatched(io, `user:${recipientId}`, "inbox_message", saved);
         });
-        io.to(`user:${saved.senderId}`).emit("inbox_message", saved);
+        emitBatched(io, `user:${saved.senderId}`, "inbox_message", saved);
 
         for (const recipientId of recipients) {
           if (!onlineUsers.has(String(recipientId))) continue;
@@ -61,13 +62,13 @@ export const startConsumer = async (io) => {
             }
           );
 
-          io.to(String(saved.chatId)).emit("message_status", {
+          emitBatched(io, String(saved.chatId), "message_status", {
             messageId: saved.messageId,
             deliveredTo: nextDeliveredTo,
             readBy: (saved.readBy || []).map((id) => String(id)),
             status: nextStatus,
           });
-          io.to(`user:${saved.senderId}`).emit("message_delivered", {
+          emitBatched(io, `user:${saved.senderId}`, "message_delivered", {
             messageId: saved.messageId,
             deliveredTo: nextDeliveredTo,
             status: nextStatus,
@@ -75,7 +76,7 @@ export const startConsumer = async (io) => {
 
           const chats = await Chat.find({ participants: recipientId }).lean();
           const unreadChatsCount = buildUnreadChatsCount(chats, recipientId);
-          io.to(`user:${recipientId}`).emit("unread_chats_count", { count: unreadChatsCount });
+          emitBatched(io, `user:${recipientId}`, "unread_chats_count", { count: unreadChatsCount });
         }
       } catch (error) {
         console.error("Failed to process message", error);

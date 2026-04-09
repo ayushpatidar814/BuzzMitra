@@ -1,26 +1,45 @@
 import mongoose from "mongoose";
 import Chat from "../models/Chat.js";
 import MessageWS from "../models/MessageWS.js";
-import imagekit from "../configs/imagekit.js";
 import User from "../models/User.js";
 import fs from "fs/promises";
+import { uploadOptimizedMedia } from "../utils/media.js";
+import { isValidObjectId, parseBoundedInteger, trimString } from "../utils/request.js";
+import { buildCacheKey, deleteCacheByPrefix, getCache, setCache } from "../utils/cache.js";
+import { ok, paginated } from "../utils/response.js";
+import { createBulkNotifications, createNotification } from "../services/notification.service.js";
 
 const USER_SUMMARY = "full_name username profile_picture";
-const readUploadedFile = async (file) => {
-  const buffer = await fs.readFile(file.path);
-  await fs.unlink(file.path).catch(() => {});
-  return buffer;
+const encodeMessageCursor = (message) =>
+  message
+    ? Buffer.from(
+        JSON.stringify({
+          createdAt: message.createdAt,
+          id: String(message._id),
+        })
+      ).toString("base64")
+    : null;
+
+const decodeMessageCursor = (cursor) => {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, "base64").toString("utf8"));
+    if (!parsed?.createdAt || !parsed?.id) return null;
+    return {
+      createdAt: new Date(parsed.createdAt),
+      id: new mongoose.Types.ObjectId(parsed.id),
+    };
+  } catch {
+    return null;
+  }
 };
-
 const uploadGroupAvatar = async (file, userId) => {
-  const buffer = await readUploadedFile(file);
-  const uploadRes = await imagekit.upload({
-    file: buffer,
-    fileName: `group-${userId}-${Date.now()}-${file.originalname}`,
-    folder: "group-avatars",
-  });
-
-  return uploadRes.url;
+  const uploaded = await uploadOptimizedMedia(
+    file,
+    "group-avatars",
+    `group-${userId}-${Date.now()}-${file.originalname}`
+  );
+  return uploaded.url;
 };
 
 const isGroupMember = (chat, userId) => chat.participants.some((id) => String(id) === String(userId));
@@ -107,22 +126,19 @@ const uploadMedia = async (req, res) => {
       return res.status(400).json({ success: false, message: "Only image files are allowed" });
     }
 
-    const buffer = await fs.readFile(file.path);
-    const uploadRes = await imagekit.upload({
-      file: buffer,
-      fileName: `${req.userId}-${Date.now()}-${file.originalname}`,
-      folder: "chat-media",
-    });
-
-    await fs.unlink(file.path).catch(() => {});
+    const uploadRes = await uploadOptimizedMedia(
+      file,
+      "chat-media",
+      `${req.userId}-${Date.now()}-${file.originalname}`
+    );
 
     return res.status(200).json({
       success: true,
       media: {
         url: uploadRes.url,
-        thumbnail: uploadRes.thumbnailUrl || "",
-        size: file.size,
-        mimeType: file.mimetype,
+        thumbnail: uploadRes.thumbnail || "",
+        size: uploadRes.size,
+        mimeType: uploadRes.mimeType,
       },
     });
   } catch (error) {
@@ -133,17 +149,24 @@ const uploadMedia = async (req, res) => {
 
 const getChats = async (req, res) => {
   try {
+    const cacheKey = buildCacheKey("cache", "chats", req.userId);
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
     const [directChats, groupChats] = await Promise.all([
       buildChatSummaries(req.userId),
       buildGroupSummaries(req.userId),
     ]);
     const data = [...directChats, ...groupChats].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    return res.json({
+    const payload = {
       success: true,
       data,
       unreadChatsCount: data.filter((chat) => chat.unreadMessages > 0).length,
       totalUnreadMessages: data.reduce((sum, chat) => sum + chat.unreadMessages, 0),
-    });
+    };
+    await setCache(cacheKey, payload, 30);
+    return res.json(payload);
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -152,6 +175,8 @@ const getChats = async (req, res) => {
 const getMessages = async (req, res) => {
   try {
     const { chatId } = req.params;
+    const cursor = decodeMessageCursor(req.query.cursor);
+    const limit = parseBoundedInteger(req.query.limit, { defaultValue: 40, min: 10, max: 80 });
     if (!mongoose.Types.ObjectId.isValid(chatId)) {
       return res.status(400).json({ success: false, message: "Invalid chatId" });
     }
@@ -174,26 +199,42 @@ const getMessages = async (req, res) => {
       }
     );
     const clearedAt = chat.clearedBy?.find((entry) => String(entry.userId) === String(req.userId))?.clearedAt;
+    const cacheKey = buildCacheKey("cache", "chat-messages", chatId, String(req.userId), `cursor=${req.query.cursor || "first"}`, `limit=${limit}`);
+    const cached = cursor ? null : await getCache(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
     const messages = await MessageWS.find({
       chatId,
       ...(clearedAt ? { createdAt: { $gt: clearedAt } } : {}),
+      ...(cursor
+        ? {
+            $or: [
+              { createdAt: { $lt: cursor.createdAt } },
+              { createdAt: cursor.createdAt, _id: { $lt: cursor.id } },
+            ],
+          }
+        : {}),
     })
-      .sort({ createdAt: 1 })
-      .limit(80)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1)
       .lean();
+
+    const hasMore = messages.length > limit;
+    const pageMessages = messages.slice(0, limit).reverse();
 
     const participants = await User.find({ _id: { $in: chat.participants } }, USER_SUMMARY).lean();
     const participantMap = new Map(participants.map((participant) => [String(participant._id), participant]));
 
     const receiverId = !chat.isGroup ? chat.participants.find((id) => String(id) !== String(req.userId)) : null;
     const receiver = receiverId ? participantMap.get(String(receiverId)) || null : null;
-    const normalizedMessages = messages.map((message) => ({
+    const normalizedMessages = pageMessages.map((message) => ({
       ...message,
       deliveredTo: (message.deliveredTo || []).map((id) => String(id)),
       readBy: (message.readBy || []).map((id) => String(id)),
     }));
 
-    return res.json({
+    const payload = {
       success: true,
       data: {
         receiver,
@@ -210,8 +251,22 @@ const getMessages = async (req, res) => {
           })),
         },
         messages: normalizedMessages,
+        hasMore,
+        nextCursor: hasMore && pageMessages.length ? encodeMessageCursor(pageMessages[0]) : null,
       },
-    });
+      messages: normalizedMessages,
+      nextCursor: hasMore && pageMessages.length ? encodeMessageCursor(pageMessages[0]) : null,
+      hasMore,
+      meta: {
+        nextCursor: hasMore && pageMessages.length ? encodeMessageCursor(pageMessages[0]) : null,
+        hasMore,
+        count: normalizedMessages.length,
+      },
+    };
+    if (!cursor) {
+      await setCache(cacheKey, payload, 20);
+    }
+    return res.json(payload);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ success: false, message: error.message });
@@ -221,6 +276,9 @@ const getMessages = async (req, res) => {
 const getOrCreateChat = async (req, res) => {
   try {
     const { receiverId } = req.body;
+    if (!isValidObjectId(receiverId)) {
+      return res.status(400).json({ success: false, message: "Valid receiver id is required" });
+    }
     if (!receiverId || String(receiverId) === String(req.userId)) {
       return res.status(400).json({ success: false, message: "Receiver Id is required" });
     }
@@ -236,7 +294,8 @@ const getOrCreateChat = async (req, res) => {
       chat = await Chat.create({ participants, isGroup: false });
     }
 
-    return res.json({ success: true, data: chat });
+    await deleteCacheByPrefix(`cache:chats:${String(req.userId)}`);
+    return ok(res, { data: chat });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -260,6 +319,8 @@ const clearChatForMe = async (req, res) => {
         },
       },
     });
+
+    await deleteCacheByPrefix(`cache:chat-messages:${chatId}:${String(req.userId)}`, `cache:chats:${String(req.userId)}`);
 
     return res.status(200).json({ success: true });
   } catch (error) {
@@ -286,10 +347,14 @@ const getRecentChats = async (req, res) => {
 
 const createGroupChat = async (req, res) => {
   try {
-    const { name, participantIds = [] } = req.body;
-    const uniqueParticipants = Array.from(new Set([String(req.userId), ...participantIds.map((id) => String(id))]));
+    const name = trimString(req.body.name, { maxLength: 60 });
+    const participantIds = Array.isArray(req.body.participantIds) ? req.body.participantIds : [];
+    const normalizedParticipantIds = participantIds
+      .map((id) => String(id))
+      .filter((id) => isValidObjectId(id) && id !== String(req.userId));
+    const uniqueParticipants = Array.from(new Set([String(req.userId), ...normalizedParticipantIds]));
 
-    if (!name?.trim()) {
+    if (!name) {
       return res.status(400).json({ success: false, message: "Group name is required" });
     }
 
@@ -310,7 +375,8 @@ const createGroupChat = async (req, res) => {
       groupOwnerId: req.userId,
     });
 
-    return res.json({ success: true, data: chat, message: "Group created successfully" });
+    await deleteCacheByPrefix(...uniqueParticipants.map((id) => `cache:chats:${String(id)}`));
+    return ok(res, { data: chat, message: "Group created successfully" });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: error.message });
@@ -320,7 +386,11 @@ const createGroupChat = async (req, res) => {
 const updateGroupName = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { name } = req.body;
+    const name = trimString(req.body.name, { maxLength: 60 });
+
+    if (!isValidObjectId(chatId)) {
+      return res.status(400).json({ success: false, message: "Invalid group id" });
+    }
 
     const chat = await Chat.findById(chatId);
     if (!chat || !chat.isGroup || !isGroupMember(chat, req.userId)) {
@@ -331,12 +401,13 @@ const updateGroupName = async (req, res) => {
       return res.status(403).json({ success: false, message: "Only group admins can rename the group" });
     }
 
-    if (!name?.trim()) {
+    if (!name) {
       return res.status(400).json({ success: false, message: "Group name is required" });
     }
 
-    chat.groupName = name.trim();
+    chat.groupName = name;
     await chat.save();
+    await deleteCacheByPrefix(...(chat.participants || []).map((id) => `cache:chats:${String(id)}`));
 
     return res.json({ success: true, chat, message: "Group name updated" });
   } catch (error) {
@@ -348,7 +419,10 @@ const updateGroupName = async (req, res) => {
 const addGroupMembers = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { participantIds = [] } = req.body;
+    const participantIds = Array.isArray(req.body.participantIds) ? req.body.participantIds : [];
+    if (!isValidObjectId(chatId)) {
+      return res.status(400).json({ success: false, message: "Invalid group id" });
+    }
     const chat = await Chat.findById(chatId);
 
     if (!chat || !chat.isGroup || !isGroupMember(chat, req.userId)) {
@@ -361,7 +435,7 @@ const addGroupMembers = async (req, res) => {
 
     const nextIds = participantIds
       .map((id) => String(id))
-      .filter((id) => !chat.participants.some((participantId) => String(participantId) === id));
+      .filter((id) => isValidObjectId(id) && !chat.participants.some((participantId) => String(participantId) === id));
 
     if (!nextIds.length) {
       return res.status(400).json({ success: false, message: "No new members selected" });
@@ -374,6 +448,19 @@ const addGroupMembers = async (req, res) => {
 
     chat.participants = [...chat.participants.map((id) => String(id)), ...nextIds];
     await chat.save();
+    await deleteCacheByPrefix(...(chat.participants || []).map((id) => `cache:chats:${String(id)}`));
+    await createBulkNotifications(
+      nextIds.map((memberId) => ({
+        recipientId: memberId,
+        actorId: req.userId,
+        type: "group_added",
+        title: "Added to a group",
+        text: `You were added to ${chat.groupName || "a group"}.`,
+        link: `/app/messages/${chat._id}`,
+        entityType: "group",
+        entityId: chat._id,
+      }))
+    );
 
     return res.json({ success: true, chat, message: "Members added to group" });
   } catch (error) {
@@ -385,6 +472,9 @@ const addGroupMembers = async (req, res) => {
 const leaveGroup = async (req, res) => {
   try {
     const { chatId } = req.params;
+    if (!isValidObjectId(chatId)) {
+      return res.status(400).json({ success: false, message: "Invalid group id" });
+    }
     const chat = await Chat.findById(chatId);
 
     if (!chat || !chat.isGroup || !isGroupMember(chat, req.userId)) {
@@ -408,6 +498,7 @@ const leaveGroup = async (req, res) => {
     }
 
     await chat.save();
+    await deleteCacheByPrefix(...(chat.participants || []).map((id) => `cache:chats:${String(id)}`), `cache:chats:${String(req.userId)}`);
 
     return res.json({ success: true, message: "You left the group" });
   } catch (error) {
@@ -419,6 +510,9 @@ const leaveGroup = async (req, res) => {
 const updateGroupAvatar = async (req, res) => {
   try {
     const { chatId } = req.params;
+    if (!isValidObjectId(chatId)) {
+      return res.status(400).json({ success: false, message: "Invalid group id" });
+    }
     const chat = await Chat.findById(chatId);
     if (!chat || !chat.isGroup || !isGroupMember(chat, req.userId)) {
       return res.status(404).json({ success: false, message: "Group not found" });
@@ -434,6 +528,7 @@ const updateGroupAvatar = async (req, res) => {
 
     chat.groupAvatar = await uploadGroupAvatar(req.file, req.userId);
     await chat.save();
+    await deleteCacheByPrefix(...(chat.participants || []).map((id) => `cache:chats:${String(id)}`));
 
     return res.json({ success: true, chat, message: "Group photo updated" });
   } catch (error) {
@@ -445,6 +540,9 @@ const updateGroupAvatar = async (req, res) => {
 const removeGroupMember = async (req, res) => {
   try {
     const { chatId, memberId } = req.params;
+    if (!isValidObjectId(chatId) || !isValidObjectId(memberId)) {
+      return res.status(400).json({ success: false, message: "Invalid member request" });
+    }
     const chat = await Chat.findById(chatId);
     if (!chat || !chat.isGroup || !isGroupMember(chat, req.userId)) {
       return res.status(404).json({ success: false, message: "Group not found" });
@@ -469,6 +567,7 @@ const removeGroupMember = async (req, res) => {
     chat.participants = chat.participants.filter((id) => String(id) !== String(memberId));
     chat.groupAdminIds = chat.groupAdminIds.filter((id) => String(id) !== String(memberId));
     await chat.save();
+    await deleteCacheByPrefix(...(chat.participants || []).map((id) => `cache:chats:${String(id)}`), `cache:chats:${String(memberId)}`);
 
     return res.json({ success: true, chat, message: "Member removed from group" });
   } catch (error) {
@@ -480,6 +579,9 @@ const removeGroupMember = async (req, res) => {
 const promoteGroupAdmin = async (req, res) => {
   try {
     const { chatId, memberId } = req.params;
+    if (!isValidObjectId(chatId) || !isValidObjectId(memberId)) {
+      return res.status(400).json({ success: false, message: "Invalid member request" });
+    }
     const chat = await Chat.findById(chatId);
     if (!chat || !chat.isGroup || !isGroupMember(chat, req.userId)) {
       return res.status(404).json({ success: false, message: "Group not found" });
@@ -497,6 +599,17 @@ const promoteGroupAdmin = async (req, res) => {
       chat.groupAdminIds.push(memberId);
       await chat.save();
     }
+    await deleteCacheByPrefix(...(chat.participants || []).map((id) => `cache:chats:${String(id)}`));
+    await createNotification({
+      recipientId: memberId,
+      actorId: req.userId,
+      type: "group_promoted",
+      title: "You are now an admin",
+      text: `You were made an admin in ${chat.groupName || "the group"}.`,
+      link: `/app/messages/${chat._id}`,
+      entityType: "group",
+      entityId: chat._id,
+    });
 
     return res.json({ success: true, chat, message: "Member promoted to admin" });
   } catch (error) {
@@ -508,6 +621,9 @@ const promoteGroupAdmin = async (req, res) => {
 const demoteGroupAdmin = async (req, res) => {
   try {
     const { chatId, memberId } = req.params;
+    if (!isValidObjectId(chatId) || !isValidObjectId(memberId)) {
+      return res.status(400).json({ success: false, message: "Invalid member request" });
+    }
     const chat = await Chat.findById(chatId);
     if (!chat || !chat.isGroup || !isGroupMember(chat, req.userId)) {
       return res.status(404).json({ success: false, message: "Group not found" });
@@ -527,6 +643,7 @@ const demoteGroupAdmin = async (req, res) => {
 
     chat.groupAdminIds = chat.groupAdminIds.filter((id) => String(id) !== String(memberId));
     await chat.save();
+    await deleteCacheByPrefix(...(chat.participants || []).map((id) => `cache:chats:${String(id)}`));
 
     return res.json({ success: true, chat, message: "Admin access removed" });
   } catch (error) {
@@ -538,6 +655,9 @@ const demoteGroupAdmin = async (req, res) => {
 const transferGroupOwnership = async (req, res) => {
   try {
     const { chatId, memberId } = req.params;
+    if (!isValidObjectId(chatId) || !isValidObjectId(memberId)) {
+      return res.status(400).json({ success: false, message: "Invalid member request" });
+    }
     const chat = await Chat.findById(chatId);
     if (!chat || !chat.isGroup || !isGroupMember(chat, req.userId)) {
       return res.status(404).json({ success: false, message: "Group not found" });
@@ -556,6 +676,17 @@ const transferGroupOwnership = async (req, res) => {
       chat.groupAdminIds.push(memberId);
     }
     await chat.save();
+    await deleteCacheByPrefix(...(chat.participants || []).map((id) => `cache:chats:${String(id)}`));
+    await createNotification({
+      recipientId: memberId,
+      actorId: req.userId,
+      type: "group_owner_transferred",
+      title: "Group ownership transferred",
+      text: `You are now the owner of ${chat.groupName || "the group"}.`,
+      link: `/app/messages/${chat._id}`,
+      entityType: "group",
+      entityId: chat._id,
+    });
 
     return res.json({ success: true, chat, message: "Group ownership transferred" });
   } catch (error) {
@@ -567,6 +698,9 @@ const transferGroupOwnership = async (req, res) => {
 const getMessageViewers = async (req, res) => {
   try {
     const { messageId } = req.params;
+    if (!messageId?.trim()) {
+      return res.status(400).json({ success: false, message: "Invalid message id" });
+    }
     const message = await MessageWS.findOne({ messageId }).lean();
     if (!message) {
       return res.status(404).json({ success: false, message: "Message not found" });
