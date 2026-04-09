@@ -12,9 +12,7 @@ export const fetchUser = createAsyncThunk('user/fetchUser', async(token) => {
     })
   
     if (data.success) {
-    // Merge API userId with localStorage user
-    const localUser = JSON.parse(localStorage.getItem("user")) || {};
-    return { ...localUser, _id: data.userId };
+    return data.user;
   }
 
   return null;
@@ -36,15 +34,29 @@ const userSlice = createSlice({
     name: 'user',
     initialState,
     reducers: {
-
+        setUser: (state, action) => {
+            state.value = action.payload
+            localStorage.setItem("user", JSON.stringify(action.payload))
+        },
+        clearUser: (state) => {
+            state.value = null
+            localStorage.removeItem("user")
+        }
     },
     extraReducers: (builder) => {
         builder.addCase(fetchUser.fulfilled, (state, action) => {
             state.value = action.payload
+            if(action.payload){
+                localStorage.setItem("user", JSON.stringify(action.payload))
+            }
         }).addCase(updateUser.fulfilled, (state, action) => {
             state.value = action.payload
+            if(action.payload){
+                localStorage.setItem("user", JSON.stringify(action.payload))
+            }
         })
     }
 })
 
+export const { setUser, clearUser } = userSlice.actions
 export default userSlice.reducer

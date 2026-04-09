@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.npm
+.env
+.env.*
+Dockerfile*
+.dockerignore
+.git
+.gitignore
+vercel.json
+data
+coverage
+*.log

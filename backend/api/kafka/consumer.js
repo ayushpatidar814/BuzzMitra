@@ -2,6 +2,11 @@ import { kafkaConsumer } from "../configs/kafka.js";
 import Chat from "../models/Chat.js";
 import { saveMessage } from "../services/message.service.js";
 import { onlineUsers } from "../sockets/index.js";
+import MessageWS from "../models/MessageWS.js";
+import { emitBatched } from "../sockets/emitBatch.js";
+
+const buildUnreadChatsCount = (chats, userId) =>
+  chats.filter((chat) => Number(chat.unreadCount?.[String(userId)] || 0) > 0).length;
 
 export const startConsumer = async (io) => {
   const consumer = kafkaConsumer("chat-consumer-group");
@@ -13,52 +18,71 @@ export const startConsumer = async (io) => {
     eachMessage: async ({ message }) => {
       try {
         let payload;
-
         try {
           payload = JSON.parse(message.value.toString());
-        } catch (err) {
-          console.warn("⚠️ Skipping invalid Kafka message");
+        } catch {
+          console.warn("Skipping invalid Kafka message");
           return;
         }
 
-        if (!payload.senderId || !payload.receiverId) {
-          console.warn("⚠️ Missing required fields, skipping");
+        if (!payload.senderId || !payload.chatId) {
+          console.warn("Missing required fields, skipping");
           return;
         }
-        
+
         const saved = await saveMessage(payload);
-        if(!saved) return;
+        if (!saved) return;
 
-        
-        // ChatBox (open chat)
         io.to(saved.chatId.toString()).emit("new_message", saved);
+        const chat = await Chat.findById(saved.chatId).lean();
+        const recipients = chat?.isGroup
+          ? (chat.participants || []).map((id) => String(id)).filter((id) => id !== String(saved.senderId))
+          : [String(saved.receiverId)];
 
-        // MessageWS (chat list)
-        io.to(`user:${saved.receiverId}`).emit("inbox_message", saved);
-        io.to(`user:${saved.senderId}`).emit("inbox_message", saved);
-        
-        // 🔥 Emit updated unread chat count (if online)
-        if (onlineUsers.has(saved.receiverId)) {
-          const chats = await Chat.find({
-            participants: saved.receiverId,
-          }).lean();
+        recipients.forEach((recipientId) => {
+          emitBatched(io, `user:${recipientId}`, "inbox_message", saved);
+        });
+        emitBatched(io, `user:${saved.senderId}`, "inbox_message", saved);
 
-          const unreadChatsCount = chats.filter(
-            (c) => (c.unreadCount?.[saved.receiverId] || 0) > 0
-          ).length;
+        for (const recipientId of recipients) {
+          if (!onlineUsers.has(String(recipientId))) continue;
 
-          io.to(`user:${saved.receiverId}`).emit("unread_chats_count", {
-            count: unreadChatsCount,
+          const nextDeliveredTo = Array.from(new Set([...(saved.deliveredTo || []).map((id) => String(id)), String(recipientId)]));
+          const nextStatus = chat?.isGroup
+            ? "delivered"
+            : nextDeliveredTo.includes(String(saved.receiverId))
+              ? "delivered"
+              : saved.status;
+
+          await MessageWS.updateOne(
+            { _id: saved._id },
+            {
+              $addToSet: { deliveredTo: recipientId },
+              $set: { status: nextStatus },
+            }
+          );
+
+          emitBatched(io, String(saved.chatId), "message_status", {
+            messageId: saved.messageId,
+            deliveredTo: nextDeliveredTo,
+            readBy: (saved.readBy || []).map((id) => String(id)),
+            status: nextStatus,
           });
+          emitBatched(io, `user:${saved.senderId}`, "message_delivered", {
+            messageId: saved.messageId,
+            deliveredTo: nextDeliveredTo,
+            status: nextStatus,
+          });
+
+          const chats = await Chat.find({ participants: recipientId }).lean();
+          const unreadChatsCount = buildUnreadChatsCount(chats, recipientId);
+          emitBatched(io, `user:${recipientId}`, "unread_chats_count", { count: unreadChatsCount });
         }
-        
       } catch (error) {
-        console.error("❌ Failed to process message", error);
+        console.error("Failed to process message", error);
       }
     },
   });
-
-  console.log("📥 Kafka Consumer running");
 
   process.on("SIGINT", async () => {
     await consumer.disconnect();

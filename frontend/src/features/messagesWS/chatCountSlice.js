@@ -2,7 +2,7 @@ import { createSlice } from "@reduxjs/toolkit";
 
 /* ---------- INITIAL STATE ---------- */
 const initialState = {
-  totalUnread: 0,
+  totalUnreadChats: 0,
   perChat: {}, // { chatId: number }
 };
 
@@ -22,12 +22,16 @@ const chatCountSlice = createSlice({
       chats.forEach(chat => {
         if (chat.unreadMessages > 0) {
           perChat[chat._id] = chat.unreadMessages;
-          total += chat.unreadMessages;
+          total += 1;
         }
       });
 
       state.perChat = perChat;
-      state.totalUnread = total;
+      state.totalUnreadChats = total;
+    },
+
+    setUnreadChatsCount(state, action) {
+      state.totalUnreadChats = Number(action.payload || 0);
     },
 
     /* 🔔 Incoming message */
@@ -35,8 +39,11 @@ const chatCountSlice = createSlice({
       const chatId = action.payload;
       if (!chatId) return;
 
+      const wasUnread = Boolean(state.perChat[chatId]);
       state.perChat[chatId] = (state.perChat[chatId] || 0) + 1;
-      state.totalUnread += 1;
+      if (!wasUnread) {
+        state.totalUnreadChats += 1;
+      }
     },
 
     /* 📖 Chat opened → mark as read */
@@ -46,7 +53,9 @@ const chatCountSlice = createSlice({
 
       const count = state.perChat[chatId] || 0;
 
-      state.totalUnread = Math.max(0, state.totalUnread - count);
+      if (count > 0) {
+        state.totalUnreadChats = Math.max(0, state.totalUnreadChats - 1);
+      }
       delete state.perChat[chatId];
     },
 
@@ -62,12 +71,13 @@ export const {
   incrementUnread,
   resetChatUnread,
   setInitialCounts,
+  setUnreadChatsCount,
   resetAllUnread,
 } = chatCountSlice.actions;
 
 /* ---------- SELECTORS ---------- */
 export const selectTotalUnread = (state) =>
-  state.chatCount.totalUnread;
+  state.chatCount.totalUnreadChats;
 
 export const selectChatUnread = (chatId) => (state) =>
   state.chatCount.perChat[chatId] || 0;

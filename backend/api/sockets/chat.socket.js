@@ -1,76 +1,114 @@
-// sockets/chat.socket.js
-// import { sendMessageToKafka } from "../kafka/producer.js";
 import Chat from "../models/Chat.js";
-import MessageWS from '../models/MessageWS.js';
-import { saveMessage } from "../services/message.service.js";
+import MessageWS from "../models/MessageWS.js";
 import { onlineUsers } from "./index.js";
+import { sendMessageToKafka } from "../kafka/producer.js";
+import { emitBatched } from "./emitBatch.js";
+
+const emitDeliveredUpdates = async (io, userId) => {
+  const undeliveredMessages = await MessageWS.find({
+    senderId: { $ne: userId },
+    deliveredTo: { $ne: userId },
+  });
+
+  if (!undeliveredMessages.length) return;
+
+  await Promise.all(
+    undeliveredMessages.map(async (message) => {
+      const deliveredTo = Array.from(new Set([...(message.deliveredTo || []).map((id) => String(id)), String(userId)]));
+      const chat = await Chat.findById(message.chatId).lean();
+      const receivers = chat?.isGroup
+        ? (chat.participants || []).map((id) => String(id)).filter((id) => id !== String(message.senderId))
+        : [String(message.receiverId)];
+      const readBy = (message.readBy || []).map((id) => String(id));
+      const nextStatus = receivers.length > 0 && receivers.every((id) => readBy.includes(id))
+        ? "read"
+        : receivers.length > 0 && receivers.every((id) => deliveredTo.includes(id))
+          ? "delivered"
+          : "sent";
+
+      await MessageWS.updateOne(
+        { _id: message._id },
+        {
+          $addToSet: { deliveredTo: userId },
+          $set: { status: nextStatus },
+        }
+      );
+
+      emitBatched(io, String(message.chatId), "message_status", {
+        messageId: message.messageId,
+        deliveredTo,
+        readBy,
+        status: nextStatus,
+      });
+      emitBatched(io, `user:${message.senderId}`, "message_delivered", {
+        messageId: message.messageId,
+        deliveredTo,
+        status: nextStatus,
+      });
+    })
+  );
+};
 
 export const chatSocketHandler = (io, socket) => {
-
-  /* ---------------- USER ROOM ---------------- */
   socket.on("join_user", async (userId) => {
     if (!userId) return;
-    
+
     if (!onlineUsers.has(userId)) {
       onlineUsers.set(userId, new Set());
     }
 
     onlineUsers.get(userId).add(socket.id);
-    
     socket.join(`user:${userId}`);
-    console.log(`👤 User ${userId} joined user room`);
 
-    // 🔥 Send unread count from DB
     const chats = await Chat.find({ participants: userId }).lean();
-
-    const unreadChatsCount = chats.filter(
-      (c) => (c.unreadCount?.[userId] || 0) > 0
-    ).length;
-
-    io.to(`user:${userId}`).emit("unread_chats_count", {
-      count: unreadChatsCount,
-    });
+    const unreadChatsCount = chats.filter((chat) => Number(chat.unreadCount?.[String(userId)] || 0) > 0).length;
+    emitBatched(io, `user:${userId}`, "unread_chats_count", { count: unreadChatsCount });
+    await emitDeliveredUpdates(io, userId);
   });
 
-  /* ---------------- CHAT ROOM ---------------- */
   socket.on("join_chat", async (chatId) => {
     if (!chatId) return;
-    socket.join(chatId); // ✅ join room for this chat
+    socket.join(chatId);
 
-    console.log(`User ${socket.user.id} joined chat ${chatId}`);
-
-    // 🔹 Mark undelivered messages as delivered
-  const undeliveredMessages = await MessageWS.find({
-    chatId,
-    receiverId: socket.user.id, // messages sent TO this user
-    status: "sent",
-  });
-
-  if (undeliveredMessages.length > 0) {
-    const messageIds = undeliveredMessages.map(m => m.messageId);
-
-    // Update DB
-    await MessageWS.updateMany(
-      { messageId: { $in: messageIds } },
-      { $set: { status: "delivered" } }
-    );
-
-    // Notify the senders
-    undeliveredMessages.forEach(msg => {
-      io.to(`user:${msg.senderId}`).emit("message_delivered", {
-        messageId: msg.messageId,
-      });
+    const undeliveredMessages = await MessageWS.find({
+      chatId,
+      senderId: { $ne: socket.user.id },
+      deliveredTo: { $ne: socket.user.id },
     });
 
-    console.log(
-      `Marked ${messageIds.length} messages as delivered for chat ${chatId}`
-    );
-  }
+    if (undeliveredMessages.length > 0) {
+      for (const message of undeliveredMessages) {
+        const chat = await Chat.findById(message.chatId).lean();
+        const receivers = chat?.isGroup
+          ? (chat.participants || []).map((id) => String(id)).filter((id) => id !== String(message.senderId))
+          : [String(message.receiverId)];
+        const deliveredTo = Array.from(new Set([...(message.deliveredTo || []).map((id) => String(id)), String(socket.user.id)]));
+        const readBy = (message.readBy || []).map((id) => String(id));
+        const nextStatus = receivers.length > 0 && receivers.every((id) => readBy.includes(id))
+          ? "read"
+          : receivers.length > 0 && receivers.every((id) => deliveredTo.includes(id))
+            ? "delivered"
+            : "sent";
+
+        await MessageWS.updateOne({ _id: message._id }, { $addToSet: { deliveredTo: socket.user.id }, $set: { status: nextStatus } });
+        emitBatched(io, chatId, "message_status", {
+          messageId: message.messageId,
+          deliveredTo,
+          readBy,
+          status: nextStatus,
+        });
+        emitBatched(io, `user:${message.senderId}`, "message_delivered", {
+          messageId: message.messageId,
+          deliveredTo,
+          status: nextStatus,
+        });
+      }
+    }
   });
 
   socket.on("send_message", async (payload) => {
     try {
-      if (!payload.chatId || !payload.messageId || !payload.receiverId) return;
+      if (!payload.chatId || !payload.messageId) return;
 
       const message = {
         ...payload,
@@ -78,16 +116,13 @@ export const chatSocketHandler = (io, socket) => {
         createdAt: new Date().toISOString(),
       };
 
-      // await sendMessageToKafka(message);
-      await saveMessage(message);
-
-    } catch (err) {
-      console.error(err);
-      socket.emit("socket:error", { message: err.message });
+      await sendMessageToKafka(message);
+    } catch (error) {
+      console.error(error);
+      socket.emit("socket:error", { message: error.message });
     }
   });
 
-  // Typing indicator
   socket.on("typing", ({ chatId, isTyping }) => {
     socket.to(chatId).emit("typing", {
       chatId,
@@ -98,73 +133,65 @@ export const chatSocketHandler = (io, socket) => {
 
   socket.on("delete_message", async ({ chatId, messageId }) => {
     await MessageWS.deleteOne({ messageId });
-
     io.to(chatId).emit("message_deleted", { messageId });
   });
 
   socket.on("edit_message", async ({ chatId, messageId, text }) => {
-    await MessageWS.updateOne(
-      { messageId },
-      { $set: { text, edited: true } }
-    );
-
-    io.to(chatId).emit("message_edited", { messageId, text });
+    await MessageWS.updateOne({ messageId }, { $set: { text, edited: true } });
+    io.to(chatId).emit("message_edited", { messageId, text, edited: true });
   });
 
   socket.on("read_messages", async ({ chatId }) => {
     if (!chatId) return;
 
+    const chat = await Chat.findById(chatId).lean();
+    if (!chat) return;
+
     await MessageWS.updateMany(
-      { chatId, receiverId: socket.user.id },
-      { status: "read" }
+      { chatId, senderId: { $ne: socket.user.id } },
+      {
+        $addToSet: { deliveredTo: socket.user.id, readBy: socket.user.id },
+        $set: { status: chat.isGroup ? "read" : "read" },
+      }
     );
+    await Chat.updateOne({ _id: chatId }, { $set: { [`unreadCount.${socket.user.id}`]: 0 } });
 
-    // 🔥 Reset unread count in DB
-    await Chat.updateOne(
-      { _id: chatId },
-      { $set: { [`unreadCount.${socket.user.id}`]: 0 } }
-    );
+    const chats = await Chat.find({ participants: socket.user.id }).lean();
+    const unreadChatsCount = chats.filter((chat) => Number(chat.unreadCount?.[String(socket.user.id)] || 0) > 0).length;
 
-    // Emit updated unread count
-    const chats = await Chat.find({
-      participants: socket.user.id,
-    }).lean();
+    emitBatched(io, `user:${socket.user.id}`, "unread_chats_count", { count: unreadChatsCount });
 
-    const unreadChatsCount = chats.filter(
-      (c) => (c.unreadCount?.[socket.user.id] || 0) > 0
-    ).length;
-
-    io.to(`user:${socket.user.id}`).emit("unread_chats_count", {
-      count: unreadChatsCount,
-    });
-    
-  });
-
-  socket.on("chat:cleared", ({ chatId, userId }) => {
-    socket.to(chatId).emit("chat:cleared", {
+    const readMessages = await MessageWS.find({
       chatId,
-      userId
+      senderId: { $ne: socket.user.id },
+    }).select("messageId senderId deliveredTo readBy status");
+
+    readMessages.forEach((message) => {
+      emitBatched(io, `user:${message.senderId}`, "message_read", {
+        messageId: message.messageId,
+        deliveredTo: (message.deliveredTo || []).map((id) => String(id)),
+        readBy: (message.readBy || []).map((id) => String(id)),
+        status: message.status,
+      });
+      emitBatched(io, chatId, "message_status", {
+        messageId: message.messageId,
+        deliveredTo: (message.deliveredTo || []).map((id) => String(id)),
+        readBy: (message.readBy || []).map((id) => String(id)),
+        status: message.status,
+      });
     });
   });
-
 
   socket.on("disconnect", () => {
-  const userId = socket.user?.id;
-  if (!userId) return;
+    const userId = socket.user?.id;
+    if (!userId) return;
 
-  const sockets = onlineUsers.get(userId);
-  if (!sockets) return;
+    const sockets = onlineUsers.get(userId);
+    if (!sockets) return;
 
-  sockets.delete(socket.id);
-
-  if (sockets.size === 0) {
-    onlineUsers.delete(userId);
-    console.log(`👤 ${userId} fully offline`);
-  } else {
-    console.log(`👤 ${userId} socket closed, ${sockets.size} remaining`);
-  }
-});
-
-
-
+    sockets.delete(socket.id);
+    if (sockets.size === 0) {
+      onlineUsers.delete(userId);
+    }
+  });
 };

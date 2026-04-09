@@ -1,57 +1,87 @@
-import React, { useEffect, useRef } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import React, { Suspense, lazy, useEffect } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Login from "./pages/Login";
 import Feed from "./pages/Feed";
-import Connections from "./pages/Connections";
-import Discover from "./pages/Discover";
-import Profile from "./pages/Profile";
-import CreatePost from "./pages/CreatePost";
 import Layout from "./pages/Layout";
-import MessageWS from "./pages/messageWS/MessageWS";
-import ChatBox from "./pages/messageWS/ChatBox";
 import SocketProvider from "./socket/SocketProvider";
-import { useAuth } from "@clerk/clerk-react";
 import { Toaster } from "react-hot-toast";
-import { useDispatch } from "react-redux";
-import { fetchUser } from "./features/user/userSlice";
-import { fetchConnections } from "./features/connections/connectionsSlice";
+import { useAuth } from "./auth/AuthProvider";
+import Loading from "./components/Loading";
+import { useSelector } from "react-redux";
+import PublicFeed from "./pages/PublicFeed";
+
+const Reels = lazy(() => import("./pages/Reels"));
+const Connections = lazy(() => import("./pages/Connections"));
+const Profile = lazy(() => import("./pages/Profile"));
+const CreatePost = lazy(() => import("./pages/CreatePost"));
+const MessageWS = lazy(() => import("./pages/messageWS/MessageWS"));
+const ChatBox = lazy(() => import("./pages/messageWS/ChatBox"));
+const PublicReels = lazy(() => import("./pages/PublicReels"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+
+const LazyPage = ({ children }) => <Suspense fallback={<Loading />}>{children}</Suspense>;
+
+const ProtectedApp = ({ isAuthenticated, user, children }) => {
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    const next = `${location.pathname}${location.search || ""}`;
+    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
+  }
+
+  if (!user) {
+    return <Loading />;
+  }
+
+  return children;
+};
+
+const OAuthCallback = () => {
+  const { search } = useLocation();
+  const { finishOAuth, consumeNextPath } = useAuth();
+
+  useEffect(() => {
+    const token = new URLSearchParams(search).get("token");
+    if (token) {
+      finishOAuth(token).then(() => {
+        window.location.replace(consumeNextPath());
+      });
+    } else {
+      window.location.replace("/");
+    }
+  }, [search, finishOAuth, consumeNextPath]);
+
+  return <Loading />;
+};
 
 const App = () => {
-  const { getToken, isSignedIn } = useAuth();
-  const { pathname } = useLocation();
-  const pathnameRef = useRef(pathname);
-  const dispatch = useDispatch();
+  const { isAuthenticated, ready } = useAuth();
+  const user = useSelector((state) => state.user.value);
 
-
-  useEffect(() => {
-    if (!isSignedIn) return;
-
-    const fetchData = async () => {
-      const token = await getToken();
-      dispatch(fetchUser(token));
-      dispatch(fetchConnections(token));
-    };
-    fetchData();
-  }, [isSignedIn, getToken, dispatch]);
-
-  useEffect(() => {
-    pathnameRef.current = pathname;
-  }, [pathname]);
+  if (!ready) {
+    return <Loading />;
+  }
 
   return (
     <>
-      <Toaster />
+      <Toaster position="top-center" toastOptions={{ style: { background: "#111827", color: "#fff", border: "1px solid rgba(255,255,255,.12)" } }} />
       <SocketProvider>
         <Routes>
-          <Route path="/" element={!isSignedIn ? <Login /> : <Layout />}>
+          <Route path="/oauth/callback" element={<OAuthCallback />} />
+          <Route path="/" element={isAuthenticated ? <Navigate to="/app" replace /> : <PublicFeed />} />
+          <Route path="/public-reels" element={isAuthenticated ? <Navigate to="/app/reels" replace /> : <LazyPage><PublicReels /></LazyPage>} />
+          <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/app" replace />} />
+          <Route path="/app" element={<ProtectedApp isAuthenticated={isAuthenticated} user={user}><Layout /></ProtectedApp>}>
             <Route index element={<Feed />} />
-            <Route path="connections" element={<Connections />} />
-            <Route path="discover" element={<Discover />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="profile/:profileId" element={<Profile />} />
-            <Route path="create-post" element={<CreatePost />} />
-            <Route path="messages" element={<MessageWS />} />
-            <Route path="messages/:chatId" element={<ChatBox />} />
+            <Route path="reels" element={<LazyPage><Reels /></LazyPage>} />
+            <Route path="connections" element={<LazyPage><Connections /></LazyPage>} />
+            <Route path="discover" element={<Navigate to="/app/connections" replace />} />
+            <Route path="profile" element={<LazyPage><Profile /></LazyPage>} />
+            <Route path="profile/:profileId" element={<LazyPage><Profile /></LazyPage>} />
+            <Route path="create-post" element={<LazyPage><CreatePost /></LazyPage>} />
+            <Route path="messages" element={<LazyPage><MessageWS /></LazyPage>} />
+            <Route path="messages/:chatId" element={<LazyPage><ChatBox /></LazyPage>} />
+            <Route path="notifications" element={<LazyPage><Notifications /></LazyPage>} />
           </Route>
         </Routes>
       </SocketProvider>
