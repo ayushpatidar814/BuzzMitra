@@ -105,6 +105,13 @@ const Notifications = () => {
 
   if (loading) return <Loading />;
 
+  const handleCardKeyDown = (event, item) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openNotification(item);
+    }
+  };
+
   return (
     <div className="px-4 pb-12 pt-8 lg:px-8">
       <div className="mx-auto max-w-5xl">
@@ -144,9 +151,12 @@ const Notifications = () => {
           {items.length > 0 ? items.map((item) => {
             const meta = typeMeta[item.type] || { label: "Activity", Icon: BellRing, color: "text-white bg-white/10" };
             return (
-              <button
+              <div
                 key={item._id}
+                role="button"
+                tabIndex={0}
                 onClick={() => openNotification(item)}
+                onKeyDown={(event) => handleCardKeyDown(event, item)}
                 className={clsx("w-full rounded-[1.8rem] border p-5 text-left shadow-xl transition", isLight
                   ? (item.readAt ? "border-slate-200 bg-white text-slate-900 shadow-slate-200/30" : "border-slate-200 bg-slate-900 text-white shadow-slate-300/20")
                   : isDark
@@ -195,7 +205,7 @@ const Notifications = () => {
                     </div>
                   </div>
                 </div>
-              </button>
+              </div>
             );
           }) : (
             <div className={clsx("rounded-[1.8rem] border border-dashed px-6 py-16 text-center text-sm", isLight ? "border-slate-200 bg-white text-slate-500" : isDark ? "border-white/12 bg-white/4 text-white/55" : "border-white/15 bg-white/5 text-white/60")}>

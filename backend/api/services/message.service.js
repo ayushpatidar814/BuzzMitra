@@ -5,12 +5,12 @@ import { deleteCacheByPrefix } from "../utils/cache.js";
 import { createBulkNotifications, createNotification } from "./notification.service.js";
 
 export const saveMessage = async (data) => {
-  const exists = await MessageWS.findOne({ messageId: data.messageId });
+  const exists = await MessageWS.findOne({ messageId: data.messageId }).lean();
   if (exists) return exists;
 
   let chat = null;
   if (data.chatId) {
-    chat = await Chat.findById(data.chatId);
+    chat = await Chat.findById(data.chatId).select("participants isGroup groupName").lean();
   }
 
   if (!chat) {
@@ -18,8 +18,8 @@ export const saveMessage = async (data) => {
     chat = await Chat.findOneAndUpdate(
       { participants, isGroup: false },
       { $setOnInsert: { participants, isGroup: false }, $set: { updatedAt: new Date() } },
-      { new: true, upsert: true }
-    );
+      { new: true, upsert: true, lean: true }
+    ).lean();
   }
 
   const participantIds = (chat.participants || []).map((id) => String(id));
@@ -55,7 +55,7 @@ export const saveMessage = async (data) => {
     return acc;
   }, {});
 
-  await Chat.updateOne(
+  const chatUpdatePromise = Chat.updateOne(
     { _id: chat._id },
     {
       ...(receivers.length ? { $inc: unreadIncrements } : {}),
@@ -63,14 +63,15 @@ export const saveMessage = async (data) => {
     }
   );
 
-  await deleteCacheByPrefix(
+  const cacheInvalidationPromise = deleteCacheByPrefix(
     ...participantIds.map((id) => `cache:chats:${String(id)}`),
     `cache:chat-messages:${String(chat._id)}`
   );
 
+  let notificationPromise = Promise.resolve();
   if (!data.suppressNotification) {
     if (chat.isGroup) {
-      await createBulkNotifications(
+      notificationPromise = createBulkNotifications(
         receivers.map((recipientId) => ({
           recipientId,
           actorId: senderId,
@@ -84,7 +85,7 @@ export const saveMessage = async (data) => {
         }))
       );
     } else if (data.receiverId) {
-      await createNotification({
+      notificationPromise = createNotification({
         recipientId: data.receiverId,
         actorId: senderId,
         type: "message",
@@ -97,6 +98,8 @@ export const saveMessage = async (data) => {
       });
     }
   }
+
+  await Promise.all([chatUpdatePromise, cacheInvalidationPromise, notificationPromise]);
 
   return message;
 };
