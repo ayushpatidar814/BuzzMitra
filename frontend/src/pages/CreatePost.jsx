@@ -172,7 +172,7 @@ const CreatePost = () => {
       <div className="mx-auto max-w-5xl rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/30 sm:p-8">
         <div className='flex flex-wrap items-center justify-between gap-4'>
           <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-400">New post</p>
+            <p className="text-sm uppercase tracking-[0.24em] text-slate-600">New post</p>
             <h1 className="mt-2 text-3xl font-semibold text-slate-900">Share what is new with your audience.</h1>
           </div>
           <div className='flex rounded-2xl bg-slate-100 p-1'>
@@ -194,7 +194,7 @@ const CreatePost = () => {
               </div>
             </div>
 
-            <textarea className="min-h-40 w-full resize-none rounded-[1.6rem] border border-slate-200 p-4 text-sm outline-none" placeholder={mode === "reel" ? "Write a caption for your reel..." : "What would you like to share today?"} value={mode === "reel" ? caption : content} onChange={(e) => mode === "reel" ? setCaption(e.target.value) : setContent(e.target.value)} />
+            <textarea className="min-h-40 w-full resize-none rounded-[1.6rem] border border-slate-200 p-4 text-sm text-slate-900 outline-none" placeholder={mode === "reel" ? "Write a caption for your reel..." : "What would you like to share today?"} value={mode === "reel" ? caption : content} onChange={(e) => mode === "reel" ? setCaption(e.target.value) : setContent(e.target.value)} />
 
             {mode === "post" && (
               <label className='flex cursor-pointer items-center justify-center gap-2 rounded-[1.6rem] border border-dashed border-slate-300 p-6 text-slate-600'>
@@ -333,7 +333,7 @@ const CreatePost = () => {
                 className='w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none text-slate-800'
               />
             ))}
-            <select value={meta.visibility} onChange={(e) => setMeta({ ...meta, visibility: e.target.value })} className='w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none'>
+            <select value={meta.visibility} onChange={(e) => setMeta({ ...meta, visibility: e.target.value })} className='w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none text-slate-800'>
               <option value="public">Public</option>
               <option value="followers">Followers only</option>
               <option value="private">Only me</option>
