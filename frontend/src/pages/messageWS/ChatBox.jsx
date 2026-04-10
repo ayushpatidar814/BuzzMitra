@@ -400,7 +400,7 @@ const ChatBox = () => {
         )}
       </div>
 
-      <div className="h-full overflow-y-scroll p-5 md:px-10" style={{ backgroundImage: `url(${chatBg})` }}>
+      <div className="h-full overflow-y-scroll no-scrollbar p-5 md:px-10" style={{ backgroundImage: `url(${chatBg})` }}>
         <div className="mx-auto max-w-5xl space-y-4">
           {hasMoreMessages && (
             <div className="flex justify-center">
@@ -544,20 +544,20 @@ const ChatBox = () => {
           <div className="mx-auto mt-12 max-w-md rounded-[2rem] bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm uppercase tracking-[0.22em] text-slate-400">Message status</p>
+                <p className="text-sm uppercase tracking-[0.22em] text-slate-600">Message status</p>
                 <h3 className="mt-2 text-xl font-semibold text-slate-900">Delivered and seen</h3>
               </div>
-              <button onClick={() => setViewerModal(null)} className="rounded-full bg-slate-100 px-3 py-1 text-sm">Close</button>
+              <button onClick={() => setViewerModal(null)} className="rounded-full bg-slate-900 px-3 py-1 text-sm">Close</button>
             </div>
             <div className="mt-4 space-y-3">
-              {viewerLoading && <p className="text-sm text-slate-500">Loading...</p>}
+              {viewerLoading && <p className="text-sm text-slate-800">Loading...</p>}
               {(viewerModal || []).map((viewer) => (
                 <div key={viewer._id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar src={viewer.profile_picture} size="sm" alt={viewer.full_name} />
                     <div>
                       <p className="font-medium text-slate-900">{viewer.full_name}</p>
-                      <p className="text-sm text-slate-500">@{viewer.username}</p>
+                      <p className="text-sm text-slate-600">@{viewer.username}</p>
                     </div>
                   </div>
                   <p className={viewer.read ? "text-blue-500" : viewer.delivered ? "text-slate-700" : "text-slate-400"}>
@@ -581,7 +581,7 @@ const ChatBox = () => {
               <button onClick={() => setGroupSheetOpen(false)} className="rounded-full bg-slate-900 px-3 py-1 text-sm">Close</button>
             </div>
 
-            <div className="overflow-y-auto px-6 py-5">
+            <div className="overflow-y-auto no-scrollbar px-6 py-5">
               <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4">
                 <Avatar src={groupAvatarFile ? URL.createObjectURL(groupAvatarFile) : chatMeta.groupAvatar} size="xl" alt={chatMeta.groupName} />
                 <div>
@@ -607,7 +607,7 @@ const ChatBox = () => {
 
               <div className="mt-5 rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm font-medium text-slate-900">Members</p>
-                <div className="mt-3 max-h-56 space-y-3 overflow-y-auto">
+                <div className="mt-3 max-h-56 space-y-3 overflow-y-auto no-scrollbar">
                   {(chatMeta.participants || []).map((member) => (
                     <div key={member._id} className="flex items-center justify-between rounded-2xl bg-white px-3 py-3">
                       <button
@@ -708,7 +708,7 @@ const ChatBox = () => {
                   {!!availableMembers.length && (
                     <div className="mt-5">
                       <p className="text-sm font-medium text-slate-900">Add members</p>
-                      <div className="mt-3 max-h-44 space-y-2 overflow-y-auto">
+                      <div className="mt-3 max-h-44 space-y-2 overflow-y-auto no-scrollbar">
                         {availableMembers.map((person) => {
                           const checked = selectedMembers.includes(String(person._id));
                           return (

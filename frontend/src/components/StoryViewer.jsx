@@ -171,7 +171,7 @@ const StoryViewer = ({viewStory, setViewStory, storyGroups = []}) => {
               onChange={(e) => setReplyText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendReply()}
               placeholder={`Reply to ${currentGroup?.user?.full_name || "story"}...`}
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-white/60"
+              className="flex-1 bg-transparent text-sm outline-none text-slate-800 placeholder:text-white/60"
             />
             <button
               onClick={sendReply}
@@ -198,7 +198,7 @@ const StoryViewer = ({viewStory, setViewStory, storyGroups = []}) => {
               <X className='h-4 w-4' />
             </button>
           </div>
-          <div className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
+          <div className="mt-4 max-h-72 space-y-3 overflow-y-auto no-scrollbar pr-1">
             {viewers.map((viewer) => (
               <div key={`${viewer._id}-${viewer.viewed_at}`} className="flex items-center gap-3 rounded-2xl bg-white/[0.04] px-3 py-3">
                 <Avatar src={viewer.profile_picture} alt={viewer.full_name} size="sm" />

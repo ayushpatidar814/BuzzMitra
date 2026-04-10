@@ -170,8 +170,8 @@ const MessageWS = () => {
           </div>
 
           <div className="mt-6 flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <Search className="w-4 h-4 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats or people" className="flex-1 bg-transparent outline-none" />
+            <Search className="w-4 h-4 text-slate-600" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats or people" className="flex-1 bg-transparent outline-none text-slate-800" />
           </div>
 
           <div className="mt-6">
@@ -179,7 +179,7 @@ const MessageWS = () => {
               items={filteredChats}
               itemHeight={92}
               height={Math.min(620, Math.max(220, filteredChats.length * 92))}
-              className="overflow-y-auto"
+              className="overflow-y-auto no-scrollbar"
               renderItem={(chat) => {
               const otherUser = chat.otherUser;
               const unreadCount = perChat[chat._id] || 0;
@@ -245,7 +245,7 @@ const MessageWS = () => {
               placeholder="Group name"
               className="mt-5 w-full rounded-2xl border border-slate-800 px-4 py-3 outline-none text-slate-800"
             />
-            <div className="mt-4 max-h-80 space-y-3 overflow-y-auto">
+            <div className="mt-4 max-h-80 space-y-3 overflow-y-auto no-scrollbar">
               {network.map((person) => {
                 const checked = selectedMembers.includes(person._id);
                 return (

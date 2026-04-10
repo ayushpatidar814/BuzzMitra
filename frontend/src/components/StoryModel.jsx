@@ -88,7 +88,7 @@ const StoryModel = ({ setShowModel, fetchStories }) => {
   };
 
   return (
-    <div className='fixed inset-0 z-[110] overflow-y-auto bg-[#040712]/90 px-4 py-6 text-white backdrop-blur-xl'>
+    <div className='fixed inset-0 z-[110] overflow-y-auto no-scrollbar bg-[#040712]/90 px-4 py-6 text-white backdrop-blur-xl'>
       <div className='mx-auto w-full max-w-6xl'>
         <div className='rounded-[2rem] border border-white/10 bg-[linear-gradient(145deg,rgba(15,23,42,.95),rgba(17,24,39,.92))] shadow-2xl shadow-black/40'>
           <div className='flex items-center justify-between border-b border-white/10 px-5 py-4 sm:px-8'>

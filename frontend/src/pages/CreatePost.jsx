@@ -330,7 +330,7 @@ const CreatePost = () => {
                 placeholder={field === "category" ? "Category" : field === "sub_category" ? "Subcategory" : "Target audience"}
                 value={meta[field]}
                 onChange={(e) => setMeta({ ...meta, [field]: e.target.value })}
-                className='w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none'
+                className='w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none text-slate-800'
               />
             ))}
             <select value={meta.visibility} onChange={(e) => setMeta({ ...meta, visibility: e.target.value })} className='w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none'>

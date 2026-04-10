@@ -172,7 +172,7 @@ const PostCard = ({post, readOnly = false, onRequireAuth, onDeleted, highlighted
               onChange={(e) => setReplyDrafts((prev) => ({ ...prev, [item._id]: e.target.value }))}
               onKeyDown={(e) => e.key === "Enter" && submitReply(item._id)}
               placeholder='Write a reply...'
-              className={clsx('flex-1 rounded-2xl border px-3 py-2 text-sm outline-none', isDark ? 'border-white/10 bg-black text-white placeholder:text-white/35' : 'border-slate-200 bg-white')}
+              className={clsx('flex-1 rounded-2xl border px-3 py-2 text-sm outline-none', isDark ? 'border-white/10 bg-black text-white placeholder:text-white/35' : 'border-slate-200 bg-white text-slate-800')}
             />
             <button onClick={() => submitReply(item._id)} className={clsx('rounded-2xl px-3 py-2 text-xs font-semibold', isDark ? 'bg-white text-black' : 'bg-slate-950 text-white')}>Reply</button>
           </div>
@@ -266,7 +266,7 @@ const PostCard = ({post, readOnly = false, onRequireAuth, onDeleted, highlighted
             onKeyDown={(e) => e.key === "Enter" && submitComment()}
             placeholder={readOnly ? 'Create an account to comment...' : 'Write a comment...'}
             disabled={readOnly}
-            className={clsx('flex-1 rounded-2xl border px-4 py-3 text-sm outline-none', isDark ? 'border-white/10 bg-white/5 text-white placeholder:text-white/35 disabled:bg-white/4 disabled:text-white/30' : 'border-slate-200 disabled:bg-slate-50 disabled:text-slate-400')}
+            className={clsx('flex-1 rounded-2xl border px-4 py-3 text-sm outline-none', isDark ? 'border-white/10 bg-white/5 text-white placeholder:text-white/35 disabled:bg-white/4 disabled:text-white/30' : 'border-slate-200 disabled:bg-slate-50 text-slate-800')}
           />
           <button onClick={submitComment} className={clsx('rounded-2xl px-4 py-3 text-sm font-semibold', isDark ? 'bg-white text-black' : 'bg-slate-950 text-white')}>{readOnly ? 'Join' : 'Post'}</button>
         </div>

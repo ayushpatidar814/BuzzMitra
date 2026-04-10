@@ -43,7 +43,7 @@ const Discover = () => {
           <div className="p-6">
             <div className="relative">
               <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5' />
-              <input type="text" placeholder='Search people by name, username, bio, or location...' className='w-full rounded-2xl border border-gray-300 py-3 pl-10 sm:pl-12 max-sm:text-sm' onChange={(e)=>setInput(e.target.value)} value={input} />
+              <input type="text" placeholder='Search people by name, username, bio, or location...' className='w-full rounded-2xl border border-gray-300 py-3 pl-10 sm:pl-12 max-sm:text-sm text-slate-800' onChange={(e)=>setInput(e.target.value)} value={input} />
             </div>
           </div>
         </div>

@@ -8,7 +8,7 @@ const ProfileConnectionsModal = ({ title, users = [], onClose, hasMore = false, 
 
   return (
     <div className='fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm'>
-      <div className='w-full max-w-2xl overflow-hidden rounded-[2rem] bg-white shadow-2xl'>
+      <div className='w-full max-w-2xl overflow-hidden no-scrollbar rounded-[2rem] bg-white shadow-2xl'>
         <div className='flex items-center justify-between border-b border-slate-100 px-6 py-5'>
           <div>
             <h2 className='text-xl font-semibold text-slate-900'>{title}</h2>
@@ -25,7 +25,7 @@ const ProfileConnectionsModal = ({ title, users = [], onClose, hasMore = false, 
               items={users}
               itemHeight={96}
               height={Math.min(560, Math.max(180, users.length * 96))}
-              className='overflow-y-auto'
+              className='overflow-y-auto no-scrollbar'
               renderItem={(person) => (
                 <button
                   key={person._id}
