@@ -456,7 +456,7 @@ const ChatBox = () => {
                     {message.type === "media" && message.media && (
                       <img src={message.media.url} alt="media" className="mb-2 h-72 w-72 max-w-full rounded-2xl object-cover" />
                     )}
-                    {message.text && <p>{message.text}</p>}
+                    {message.text && <p className="text-slate-900">{message.text}</p>}
 
                     <div className="mt-1 text-right text-[11px] text-gray-400">
                       {formatTime(message.createdAt)}
@@ -498,7 +498,7 @@ const ChatBox = () => {
       </div>
 
       <div className="px-4">
-        <div className="mx-auto mb-5 flex max-w-xl items-center gap-3 rounded-full border bg-white p-2 pl-5">
+        <div className="mx-auto mb-5 flex max-w-xl items-center gap-3 rounded-full border bg-white p-2 pl-5 text-slate-900">
           <input
             type="text"
             className="flex-1 outline-none"
@@ -574,11 +574,11 @@ const ChatBox = () => {
           <div className="mx-auto mt-4 flex max-h-[calc(100vh-2rem)] max-w-lg flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
               <div>
-                <p className="text-sm uppercase tracking-[0.22em] text-slate-400">Group details</p>
+                <p className="text-sm uppercase tracking-[0.22em] text-slate-800">Group details</p>
                 <h3 className="mt-2 text-xl font-semibold text-slate-900">{chatMeta.groupName}</h3>
-                <p className="mt-1 text-sm text-slate-500">{isGroupOwner ? "You are the group owner" : isGroupAdmin ? "You are an admin" : "You are a member"}</p>
+                <p className="mt-1 text-sm text-slate-800">{isGroupOwner ? "You are the group owner" : isGroupAdmin ? "You are an admin" : "You are a member"}</p>
               </div>
-              <button onClick={() => setGroupSheetOpen(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm">Close</button>
+              <button onClick={() => setGroupSheetOpen(false)} className="rounded-full bg-slate-900 px-3 py-1 text-sm">Close</button>
             </div>
 
             <div className="overflow-y-auto px-6 py-5">
@@ -586,7 +586,7 @@ const ChatBox = () => {
                 <Avatar src={groupAvatarFile ? URL.createObjectURL(groupAvatarFile) : chatMeta.groupAvatar} size="xl" alt={chatMeta.groupName} />
                 <div>
                   <p className="font-medium text-slate-900">Group photo</p>
-                  <p className="mt-1 text-sm text-slate-500">Keep your group easy to spot in the inbox.</p>
+                  <p className="mt-1 text-sm text-slate-600">Keep your group easy to spot in the inbox.</p>
                   {isGroupAdmin && (
                     <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
                       Choose photo
@@ -618,7 +618,7 @@ const ChatBox = () => {
                         <Avatar src={member.profile_picture} size="sm" alt={member.full_name} />
                         <div>
                           <p className="font-medium text-slate-900">{member.full_name}</p>
-                          <p className="text-sm text-slate-500">@{member.username}</p>
+                          <p className="text-sm text-slate-600">@{member.username}</p>
                         </div>
                       </button>
                       <div className="flex items-center gap-2">
@@ -700,7 +700,7 @@ const ChatBox = () => {
                   <div className="mt-5">
                     <label className="text-sm font-medium text-slate-900">Rename group</label>
                     <div className="mt-2 flex gap-2">
-                      <input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 outline-none" />
+                      <input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="flex-1 rounded-2xl border border-slate-200 text-slate-800 px-4 py-3 outline-none" />
                       <button disabled={groupActionLoading} onClick={renameGroup} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">Save</button>
                     </div>
                   </div>

@@ -234,16 +234,16 @@ const MessageWS = () => {
           <div className="mx-auto mt-10 max-w-xl rounded-[2rem] bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm uppercase tracking-[0.22em] text-slate-400">New Group</p>
+                <p className="text-sm uppercase tracking-[0.22em] text-slate-800">New Group</p>
                 <h2 className="mt-2 text-2xl font-semibold text-slate-900">Create a group chat</h2>
               </div>
-              <button onClick={() => setGroupModalOpen(false)} className="rounded-full bg-slate-100 px-3 py-1 text-sm">Close</button>
+              <button onClick={() => setGroupModalOpen(false)} className="rounded-full bg-slate-900 px-3 py-1 text-sm">Close</button>
             </div>
             <input
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               placeholder="Group name"
-              className="mt-5 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+              className="mt-5 w-full rounded-2xl border border-slate-800 px-4 py-3 outline-none text-slate-800"
             />
             <div className="mt-4 max-h-80 space-y-3 overflow-y-auto">
               {network.map((person) => {
