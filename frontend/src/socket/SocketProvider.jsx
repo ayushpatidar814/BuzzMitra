@@ -11,9 +11,11 @@ import {
 } from "../features/notifications/notificationsSlice";
 import toast from "react-hot-toast";
 import Notification from "../components/Notification";
+import { useThemeSettings } from "../theme/ThemeProvider";
 
 const SocketProvider = ({ children }) => {
   const { token, isAuthenticated, authHeaders } = useAuth();
+  const { settings } = useThemeSettings();
   const user = useSelector((state) => state.user.value);
   const dispatch = useDispatch();
 
@@ -64,7 +66,9 @@ const SocketProvider = ({ children }) => {
 
     const onNotification = (notification) => {
       dispatch(incrementUnreadNotifications());
-      toast.custom((t) => <Notification t={t} notification={notification} />, { duration: 5000 });
+      if (settings.notifications.desktopToasts) {
+        toast.custom((t) => <Notification t={t} notification={notification} />, { duration: 5000 });
+      }
     };
 
     const onNotificationBatch = (items = []) => {
@@ -97,7 +101,7 @@ const SocketProvider = ({ children }) => {
       dispatch(resetAllUnread());
       dispatch(resetNotificationsState());
     };
-  }, [token, isAuthenticated, user?._id, dispatch, authHeaders]);
+  }, [token, isAuthenticated, user?._id, dispatch, authHeaders, settings.notifications.desktopToasts]);
 
   return children;
 };

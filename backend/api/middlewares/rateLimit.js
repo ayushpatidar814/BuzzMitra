@@ -23,7 +23,12 @@ const touchMemoryEntry = (key, windowMs) => {
   return entry;
 };
 
-export const rateLimit = ({ prefix, windowMs = 60_000, max = 60, message = "Too many requests" }) => async (req, res, next) => {
+export const rateLimit = ({ prefix, windowMs = 60_000, max = 500, message = "Too many requests" }) => async (req, res, next) => {
+  
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+
   const key = getClientKey(req, prefix);
   const redis = getRedis();
 

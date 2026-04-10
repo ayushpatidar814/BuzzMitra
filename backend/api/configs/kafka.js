@@ -11,9 +11,11 @@ const kafka = new Kafka({
     key: process.env.KAFKA_KEY_CERT.replace(/\\n/g, '\n'),
   },
 
+  requestTimeout: 30000,
+
   retry: {
     initialRetryTime: 300,
-    retries: 10
+    retries: 5
   },
 
   logLevel: logLevel.ERROR,

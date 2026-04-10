@@ -8,6 +8,8 @@ import { resetChatUnread } from "../features/messagesWS/chatCountSlice";
 import { useSocket } from "../hooks/useSocket";
 import { useAuth } from "../auth/AuthProvider";
 import Avatar from "./Avatar";
+import { useThemeSettings } from "../theme/ThemeProvider";
+import clsx from "clsx";
 
 const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) => {
   const [chats, setChats] = useState(initialChats || []);
@@ -19,6 +21,9 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
   const { perChat } = useSelector((state) => state.chatCount);
   const { network = [] } = useSelector((state) => state.connections);
   const bootstrappedRef = useRef(Boolean(initialChats));
+  const { theme } = useThemeSettings();
+  const isLight = theme === "light";
+  const isDark = theme === "dark";
 
   const fetchRecentMessages = useCallback(async () => {
     try {
@@ -79,8 +84,8 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
   }, [socket, user?._id, network]);
 
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/30">
-      <h3 className="font-semibold text-slate-900">Inbox</h3>
+    <div className={clsx("rounded-[2rem] border p-5 shadow-xl", isLight ? "border-slate-200 bg-white shadow-slate-200/30" : isDark ? "border-white/10 bg-black/80 text-white shadow-black/30" : "border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/30")}>
+      <h3 className={clsx("font-semibold", isLight ? "text-slate-900" : isDark ? "text-white" : "text-slate-900")}>Inbox</h3>
       <div className="mt-4 flex flex-col max-h-80 overflow-y-auto no-scrollbar">
         {chats.map((chat) => {
           const unreadCount = perChat[chat._id] || 0;
@@ -91,7 +96,9 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
                 dispatch(resetChatUnread(chat._id));
                 navigate(`/app/messages/${chat._id}`);
               }}
-              className={`flex items-start gap-3 rounded-2xl px-3 py-3 transition cursor-pointer ${unreadCount > 0 ? "bg-lime-50" : "hover:bg-slate-50"}`}
+              className={clsx("flex items-start gap-3 rounded-2xl px-3 py-3 transition cursor-pointer", unreadCount > 0
+                ? (isDark ? "bg-white/8" : "bg-lime-50")
+                : (isLight ? "hover:bg-slate-50" : isDark ? "hover:bg-white/6" : "hover:bg-slate-50"))}
             >
               <Avatar
                 src={chat.isGroup ? chat.avatar : chat.otherUser?.profile_picture}
@@ -100,19 +107,19 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
               />
               <div className="w-full">
                 <div className="flex items-center justify-between">
-                  <p className={`font-medium ${unreadCount ? "text-slate-950" : "text-slate-700"}`}>{chat.isGroup ? chat.title : chat.otherUser?.full_name}</p>
-                  <p className="text-[10px] text-slate-400">{moment(chat.updatedAt).fromNow()}</p>
+                  <p className={clsx("font-medium", unreadCount ? (isDark ? "text-white" : "text-slate-950") : (isDark ? "text-white/84" : "text-slate-700"))}>{chat.isGroup ? chat.title : chat.otherUser?.full_name}</p>
+                  <p className={clsx("text-[10px]", isDark ? "text-white/40" : "text-slate-400")}>{moment(chat.updatedAt).fromNow()}</p>
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2">
-                  <p className="truncate text-sm text-slate-500">{chat.lastMessage?.text || (chat.lastMessage?.media ? "Media" : "")}</p>
-                  {unreadCount > 0 && <span className="min-w-[18px] rounded-full bg-slate-950 px-2 py-1 text-[10px] font-semibold text-white">{unreadCount}</span>}
+                  <p className={clsx("truncate text-sm", isDark ? "text-white/58" : "text-slate-500")}>{chat.lastMessage?.text || (chat.lastMessage?.media ? "Media" : "")}</p>
+                  {unreadCount > 0 && <span className={clsx("min-w-[18px] rounded-full px-2 py-1 text-[10px] font-semibold", isDark ? "bg-white text-black" : "bg-slate-950 text-white")}>{unreadCount}</span>}
                 </div>
               </div>
             </div>
           );
         })}
 
-        {chats.length === 0 && <p className="py-4 text-center text-sm text-slate-400">Your recent conversations will show up here.</p>}
+        {chats.length === 0 && <p className={clsx("py-4 text-center text-sm", isDark ? "text-white/45" : "text-slate-400")}>Your recent conversations will show up here.</p>}
       </div>
     </div>
   );

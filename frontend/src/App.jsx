@@ -9,6 +9,7 @@ import { useAuth } from "./auth/AuthProvider";
 import Loading from "./components/Loading";
 import { useSelector } from "react-redux";
 import PublicFeed from "./pages/PublicFeed";
+import { useThemeSettings } from "./theme/ThemeProvider";
 
 const Reels = lazy(() => import("./pages/Reels"));
 const Connections = lazy(() => import("./pages/Connections"));
@@ -18,6 +19,7 @@ const MessageWS = lazy(() => import("./pages/messageWS/MessageWS"));
 const ChatBox = lazy(() => import("./pages/messageWS/ChatBox"));
 const PublicReels = lazy(() => import("./pages/PublicReels"));
 const Notifications = lazy(() => import("./pages/Notifications"));
+const SettingsPage = lazy(() => import("./pages/Settings"));
 
 const LazyPage = ({ children }) => <Suspense fallback={<Loading />}>{children}</Suspense>;
 
@@ -56,6 +58,7 @@ const OAuthCallback = () => {
 
 const App = () => {
   const { isAuthenticated, ready } = useAuth();
+  const { theme } = useThemeSettings();
   const user = useSelector((state) => state.user.value);
 
   if (!ready) {
@@ -64,7 +67,16 @@ const App = () => {
 
   return (
     <>
-      <Toaster position="top-center" toastOptions={{ style: { background: "#111827", color: "#fff", border: "1px solid rgba(255,255,255,.12)" } }} />
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: theme === "light"
+            ? { background: "#ffffff", color: "#0f172a", border: "1px solid rgba(148,163,184,.28)", boxShadow: "0 18px 60px rgba(15,23,42,.12)" }
+            : theme === "dark"
+              ? { background: "#050505", color: "#ffffff", border: "1px solid rgba(255,255,255,.14)", boxShadow: "0 18px 60px rgba(0,0,0,.45)" }
+              : { background: "#111827", color: "#fff", border: "1px solid rgba(255,255,255,.12)" },
+        }}
+      />
       <SocketProvider>
         <Routes>
           <Route path="/oauth/callback" element={<OAuthCallback />} />
@@ -82,6 +94,7 @@ const App = () => {
             <Route path="messages" element={<LazyPage><MessageWS /></LazyPage>} />
             <Route path="messages/:chatId" element={<LazyPage><ChatBox /></LazyPage>} />
             <Route path="notifications" element={<LazyPage><Notifications /></LazyPage>} />
+            <Route path="settings" element={<LazyPage><SettingsPage /></LazyPage>} />
           </Route>
         </Routes>
       </SocketProvider>

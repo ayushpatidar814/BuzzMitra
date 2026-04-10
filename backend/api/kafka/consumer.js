@@ -8,6 +8,22 @@ import { emitBatched } from "../sockets/emitBatch.js";
 const buildUnreadChatsCount = (chats, userId) =>
   chats.filter((chat) => Number(chat.unreadCount?.[String(userId)] || 0) > 0).length;
 
+const buildUnreadCountMap = (chats, recipientIds) => {
+  const recipients = new Set(recipientIds.map((id) => String(id)));
+  const counts = new Map();
+
+  chats.forEach((chat) => {
+    (chat.participants || []).forEach((participantId) => {
+      const normalizedId = String(participantId);
+      if (!recipients.has(normalizedId)) return;
+      if (Number(chat.unreadCount?.[normalizedId] || 0) <= 0) return;
+      counts.set(normalizedId, (counts.get(normalizedId) || 0) + 1);
+    });
+  });
+
+  return counts;
+};
+
 export const startConsumer = async (io) => {
   const consumer = kafkaConsumer("chat-consumer-group");
 
@@ -15,6 +31,7 @@ export const startConsumer = async (io) => {
   await consumer.subscribe({ topic: "chat-messages", fromBeginning: false });
 
   await consumer.run({
+    partitionsConsumedConcurrently: 3,
     eachMessage: async ({ message }) => {
       try {
         let payload;
@@ -34,7 +51,9 @@ export const startConsumer = async (io) => {
         if (!saved) return;
 
         io.to(saved.chatId.toString()).emit("new_message", saved);
-        const chat = await Chat.findById(saved.chatId).lean();
+        const chat = await Chat.findById(saved.chatId)
+          .select("participants isGroup unreadCount")
+          .lean();
         const recipients = chat?.isGroup
           ? (chat.participants || []).map((id) => String(id)).filter((id) => id !== String(saved.senderId))
           : [String(saved.receiverId)];
@@ -44,28 +63,38 @@ export const startConsumer = async (io) => {
         });
         emitBatched(io, `user:${saved.senderId}`, "inbox_message", saved);
 
-        for (const recipientId of recipients) {
-          if (!onlineUsers.has(String(recipientId))) continue;
-
-          const nextDeliveredTo = Array.from(new Set([...(saved.deliveredTo || []).map((id) => String(id)), String(recipientId)]));
+        const onlineRecipients = recipients.filter((recipientId) => onlineUsers.has(String(recipientId)));
+        if (onlineRecipients.length) {
+          const nextDeliveredTo = Array.from(
+            new Set([
+              ...(saved.deliveredTo || []).map((id) => String(id)),
+              ...onlineRecipients.map((id) => String(id)),
+            ])
+          );
+          const readBy = (saved.readBy || []).map((id) => String(id));
           const nextStatus = chat?.isGroup
             ? "delivered"
             : nextDeliveredTo.includes(String(saved.receiverId))
               ? "delivered"
               : saved.status;
 
-          await MessageWS.updateOne(
-            { _id: saved._id },
-            {
-              $addToSet: { deliveredTo: recipientId },
-              $set: { status: nextStatus },
-            }
-          );
+          const [recipientChats] = await Promise.all([
+            Chat.find({ participants: { $in: onlineRecipients } })
+              .select("participants unreadCount")
+              .lean(),
+            MessageWS.updateOne(
+              { _id: saved._id },
+              {
+                $addToSet: { deliveredTo: { $each: onlineRecipients } },
+                $set: { status: nextStatus },
+              }
+            ),
+          ]);
 
           emitBatched(io, String(saved.chatId), "message_status", {
             messageId: saved.messageId,
             deliveredTo: nextDeliveredTo,
-            readBy: (saved.readBy || []).map((id) => String(id)),
+            readBy,
             status: nextStatus,
           });
           emitBatched(io, `user:${saved.senderId}`, "message_delivered", {
@@ -74,9 +103,12 @@ export const startConsumer = async (io) => {
             status: nextStatus,
           });
 
-          const chats = await Chat.find({ participants: recipientId }).lean();
-          const unreadChatsCount = buildUnreadChatsCount(chats, recipientId);
-          emitBatched(io, `user:${recipientId}`, "unread_chats_count", { count: unreadChatsCount });
+          const unreadCountMap = buildUnreadCountMap(recipientChats, onlineRecipients);
+          onlineRecipients.forEach((recipientId) => {
+            emitBatched(io, `user:${recipientId}`, "unread_chats_count", {
+              count: unreadCountMap.get(String(recipientId)) || 0,
+            });
+          });
         }
       } catch (error) {
         console.error("Failed to process message", error);

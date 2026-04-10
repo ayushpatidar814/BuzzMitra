@@ -8,6 +8,8 @@ import api from "../api/axios";
 import { useAuth } from "../auth/AuthProvider";
 import Avatar from "../components/Avatar";
 import Loading from "../components/Loading";
+import { useThemeSettings } from "../theme/ThemeProvider";
+import clsx from "clsx";
 import {
   decrementUnreadNotifications,
   setUnreadNotificationsCount,
@@ -37,6 +39,9 @@ const Notifications = () => {
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
+  const { theme } = useThemeSettings();
+  const isLight = theme === "light";
+  const isDark = theme === "dark";
 
   const fetchNotifications = useCallback(async (append = false, nextCursor = null, nextFilter = filter) => {
     try {
@@ -100,20 +105,27 @@ const Notifications = () => {
 
   if (loading) return <Loading />;
 
+  const handleCardKeyDown = (event, item) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openNotification(item);
+    }
+  };
+
   return (
     <div className="px-4 pb-12 pt-8 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <div className="rounded-[2rem] border border-white/10 bg-slate-950/85 p-6 text-white shadow-2xl shadow-slate-950/30">
+        <div className={clsx("rounded-[2rem] border p-6 shadow-2xl", isLight ? "border-slate-200 bg-white text-slate-900 shadow-slate-200/30" : isDark ? "border-white/10 bg-black/84 text-white shadow-black/35" : "border-white/10 bg-slate-950/85 text-white shadow-slate-950/30")}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-lime-300">Notifications</p>
+              <p className={clsx("text-sm uppercase tracking-[0.24em]", isLight ? "text-cyan-600" : isDark ? "text-white/58" : "text-lime-300")}>Notifications</p>
               <h1 className="mt-3 text-3xl font-semibold">Stay in sync with everything happening around you.</h1>
-              <p className="mt-3 max-w-2xl text-slate-300">Follow activity, post engagement, replies, direct messages, and group updates all in one place.</p>
+              <p className={clsx("mt-3 max-w-2xl", isLight ? "text-slate-600" : isDark ? "text-white/70" : "text-slate-300")}>Follow activity, post engagement, replies, direct messages, and group updates all in one place.</p>
             </div>
             <button
               onClick={markAllRead}
               disabled={markingAll || unreadCount === 0}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+              className={clsx("inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium disabled:opacity-50", isLight ? "border-slate-200 bg-slate-50 text-slate-900" : isDark ? "border-white/10 bg-white/6 text-white" : "border-white/10 bg-white/5 text-white")}
             >
               <CheckCheck className="h-4 w-4" />
               {markingAll ? "Marking..." : "Mark all as read"}
@@ -126,9 +138,9 @@ const Notifications = () => {
             <button
               key={tab}
               onClick={() => setFilter(tab)}
-              className={`rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
-                filter === tab ? "bg-white text-slate-950" : "bg-white/10 text-white/80 hover:bg-white/15"
-              }`}
+              className={clsx("rounded-2xl px-4 py-2.5 text-sm font-medium transition", filter === tab
+                ? "bg-white text-slate-950"
+                : isLight ? "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50" : isDark ? "bg-white/6 text-white/80 hover:bg-white/10" : "bg-white/10 text-white/80 hover:bg-white/15")}
             >
               {tab === "all" ? "All activity" : "Unread only"}
             </button>
@@ -139,14 +151,17 @@ const Notifications = () => {
           {items.length > 0 ? items.map((item) => {
             const meta = typeMeta[item.type] || { label: "Activity", Icon: BellRing, color: "text-white bg-white/10" };
             return (
-              <button
+              <div
                 key={item._id}
+                role="button"
+                tabIndex={0}
                 onClick={() => openNotification(item)}
-                className={`w-full rounded-[1.8rem] border p-5 text-left shadow-xl transition ${
-                  item.readAt
-                  ? "border-slate-200 bg-slate-950/10 text-white shadow-slate-950/30"
-                  : "border-slate-200 bg-slate-950/90 text-white shadow-slate-950/30"
-                }`}
+                onKeyDown={(event) => handleCardKeyDown(event, item)}
+                className={clsx("w-full rounded-[1.8rem] border p-5 text-left shadow-xl transition", isLight
+                  ? (item.readAt ? "border-slate-200 bg-white text-slate-900 shadow-slate-200/30" : "border-slate-200 bg-slate-900 text-white shadow-slate-300/20")
+                  : isDark
+                    ? (item.readAt ? "border-white/10 bg-black/70 text-white shadow-black/30" : "border-white/10 bg-black text-white shadow-black/35")
+                    : (item.readAt ? "border-slate-200 bg-slate-950/10 text-white shadow-slate-950/30" : "border-slate-200 bg-slate-950/90 text-white shadow-slate-950/30"))}
               >
                 <div className="flex items-start gap-4">
                   <button
@@ -177,23 +192,23 @@ const Notifications = () => {
                             event.stopPropagation();
                             navigate(`/app/profile/${item.actor._id}`);
                           }}
-                          className="text-left text-sm font-semibold text-cyan-300 hover:text-cyan-200"
+                          className={clsx("text-left text-sm font-semibold", isLight ? "text-cyan-700 hover:text-cyan-600" : "text-cyan-300 hover:text-cyan-200")}
                         >
                           {item.actor?.full_name}
                         </button>
                       )}
                       <h3 className="text-lg font-semibold">{item.title || "New activity"}</h3>
                     </div>
-                    <p className={`mt-2 text-sm leading-6 ${item.readAt ? "text-slate-500" : "text-slate-300"}`}>{item.text || "Open to see more details."}</p>
-                    <div className={`mt-3 text-xs ${item.readAt ? "text-slate-400" : "text-white/50"}`}>
+                    <p className={clsx("mt-2 text-sm leading-6", isLight ? (item.readAt ? "text-slate-500" : "text-slate-100") : isDark ? (item.readAt ? "text-white/52" : "text-white/74") : (item.readAt ? "text-slate-500" : "text-slate-300"))}>{item.text || "Open to see more details."}</p>
+                    <div className={clsx("mt-3 text-xs", isLight ? (item.readAt ? "text-slate-400" : "text-slate-200") : isDark ? (item.readAt ? "text-white/35" : "text-white/45") : (item.readAt ? "text-slate-400" : "text-white/50"))}>
                       {moment(item.createdAt).fromNow()}
                     </div>
                   </div>
                 </div>
-              </button>
+              </div>
             );
           }) : (
-            <div className="rounded-[1.8rem] border border-dashed border-white/15 bg-white/5 px-6 py-16 text-center text-sm text-white/60">
+            <div className={clsx("rounded-[1.8rem] border border-dashed px-6 py-16 text-center text-sm", isLight ? "border-slate-200 bg-white text-slate-500" : isDark ? "border-white/12 bg-white/4 text-white/55" : "border-white/15 bg-white/5 text-white/60")}>
               No notifications to show right now.
             </div>
           )}
@@ -204,7 +219,7 @@ const Notifications = () => {
             <button
               onClick={() => fetchNotifications(true, cursor, filter)}
               disabled={loadingMore}
-              className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium text-white disabled:opacity-60"
+              className={clsx("rounded-2xl border px-5 py-3 text-sm font-medium disabled:opacity-60", isLight ? "border-slate-200 bg-white text-slate-900" : isDark ? "border-white/10 bg-white/6 text-white" : "border-white/10 bg-white/5 text-white")}
             >
               {loadingMore ? "Loading..." : "Load more notifications"}
             </button>
