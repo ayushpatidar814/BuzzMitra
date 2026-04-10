@@ -6,6 +6,8 @@ import RecentMessages from '../components/RecentMessages'
 import api from '../api/axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../auth/AuthProvider'
+import clsx from 'clsx'
+import { useThemeSettings } from '../theme/ThemeProvider'
 
 const FeedSkeleton = () => (
   <div className='px-4 pb-12 pt-8 lg:px-8 animate-pulse'>
@@ -88,6 +90,9 @@ const Feed = () => {
   const highlightedPostId = new URLSearchParams(search).get("post")
   const postRefs = useRef({})
   const sentinelRef = useRef(null)
+  const { theme } = useThemeSettings()
+  const isLight = theme === "light"
+  const isDark = theme === "dark"
 
   const fetchFeeds = useCallback(async (cursor = null, append = false) => {
     try {
@@ -209,10 +214,10 @@ const Feed = () => {
     <div className='px-4 pb-12 pt-8 lg:px-8'>
       <div className='mx-auto grid max-w-7xl gap-8 xl:grid-cols-[minmax(0,1fr)_320px]'>
         <div className='flex flex-col items-center'>
-          <div className='rounded-[2rem] border border-white/10 bg-slate-950/85 p-6 text-white shadow-2xl shadow-slate-950/30'>
-            <p className='text-sm uppercase tracking-[0.24em] text-lime-300'>Home</p>
+          <div className={clsx('rounded-[2rem] border p-6 shadow-2xl', isLight ? 'border-slate-200 bg-white/90 text-slate-900 shadow-slate-200/40' : isDark ? 'border-white/10 bg-black/82 text-white shadow-black/35' : 'border-white/10 bg-slate-950/85 text-white shadow-slate-950/30')}>
+            <p className={clsx('text-sm uppercase tracking-[0.24em]', isLight ? 'text-cyan-600' : isDark ? 'text-white/58' : 'text-lime-300')}>Home</p>
             <h1 className='mt-3 text-3xl font-semibold'>Catch up on stories, posts, and moments you care about.</h1>
-            <p className='mt-3 max-w-2xl text-slate-300'>Keep up with people you follow, discover public updates, and jump back into what is trending around you.</p>
+            <p className={clsx('mt-3 max-w-2xl', isLight ? 'text-slate-600' : isDark ? 'text-white/72' : 'text-slate-300')}>Keep up with people you follow, discover public updates, and jump back into what is trending around you.</p>
           </div>
           <div className='w-full max-w-3xl'>
             <StoriesBar initialStories={stories} />
@@ -233,13 +238,13 @@ const Feed = () => {
             <div ref={sentinelRef} className='h-6' />
 
             {loadingMore && (
-              <div className='rounded-[1.6rem] border border-slate-200 bg-white/80 px-5 py-4 text-center text-sm text-slate-500 shadow-sm'>
+              <div className={clsx('rounded-[1.6rem] border px-5 py-4 text-center text-sm shadow-sm', isLight ? 'border-slate-200 bg-white/90 text-slate-500' : isDark ? 'border-white/10 bg-black/78 text-white/60' : 'border-white/10 bg-white/80 text-slate-500')}>
                 Loading more posts...
               </div>
             )}
 
             {!hasMore && feeds.length > 0 && (
-              <div className='rounded-[1.6rem] border border-slate-200 bg-white/80 px-5 py-4 text-center text-sm text-slate-500 shadow-sm'>
+              <div className={clsx('rounded-[1.6rem] border px-5 py-4 text-center text-sm shadow-sm', isLight ? 'border-slate-200 bg-white/90 text-slate-500' : isDark ? 'border-white/10 bg-black/78 text-white/60' : 'border-white/10 bg-white/80 text-slate-500')}>
                 You are all caught up for now.
               </div>
             )}
@@ -247,10 +252,10 @@ const Feed = () => {
         </div>
 
         <div className='space-y-4 self-start xl:sticky xl:top-8'>
-          <div className='rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/30'>
-            <p className='text-xs uppercase tracking-[0.24em] text-slate-400'>Get discovered</p>
-            <h3 className='mt-3 text-xl font-semibold text-slate-900'>Help the right people find your next reel.</h3>
-            <p className='mt-2 text-sm text-slate-600'>Choose the right category and audience when you post so your content shows up in the most relevant feed.</p>
+          <div className={clsx('rounded-[2rem] border p-5 shadow-xl', isLight ? 'border-slate-200 bg-white shadow-slate-200/30' : isDark ? 'border-white/10 bg-black/80 text-white shadow-black/30' : 'border-white/10 bg-slate-950/70 text-white shadow-slate-950/20')}>
+            <p className={clsx('text-xs uppercase tracking-[0.24em]', isLight ? 'text-cyan-600' : isDark ? 'text-white/58' : 'text-lime-300')}>Get discovered</p>
+            <h3 className={clsx('mt-3 text-xl font-semibold', isLight ? 'text-slate-900' : 'text-white')}>Help the right people find your next reel.</h3>
+            <p className={clsx('mt-2 text-sm', isLight ? 'text-slate-600' : isDark ? 'text-white/68' : 'text-slate-300')}>Choose the right category and audience when you post so your content shows up in the most relevant feed.</p>
           </div>
           <RecentMessages initialChats={bootstrappedSidebar ? recentChats : null} suspendInitialFetch={!bootstrappedSidebar} />
         </div>

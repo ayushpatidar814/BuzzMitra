@@ -12,9 +12,9 @@ const notificationRouter = express.Router();
 
 notificationRouter.use(protect);
 
-notificationRouter.get("/", rateLimit({ prefix: "notifications-list", windowMs: 60 * 1000, max: 80 }), getNotifications);
-notificationRouter.get("/unread-count", rateLimit({ prefix: "notifications-count", windowMs: 60 * 1000, max: 120 }), getUnreadNotificationsCount);
-notificationRouter.post("/mark-all-read", rateLimit({ prefix: "notifications-mark-all", windowMs: 60 * 1000, max: 40 }), markAllNotificationsRead);
-notificationRouter.post("/:notificationId/read", rateLimit({ prefix: "notifications-read", windowMs: 60 * 1000, max: 120 }), markNotificationRead);
+notificationRouter.get("/", rateLimit({ prefix: "notifications-list", windowMs: 60 * 1000, max: 180 }), getNotifications);
+notificationRouter.get("/unread-count", rateLimit({ prefix: "notifications-count", windowMs: 60 * 1000, max: 220 }), getUnreadNotificationsCount);
+notificationRouter.post("/mark-all-read", rateLimit({ prefix: "notifications-mark-all", windowMs: 60 * 1000, max: 300 }), markAllNotificationsRead);
+notificationRouter.post("/:notificationId/read", rateLimit({ prefix: "notifications-read", windowMs: 60 * 1000, max: 300 }), markNotificationRead);
 
 export default notificationRouter;
