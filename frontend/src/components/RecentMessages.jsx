@@ -27,11 +27,13 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
 
   const fetchRecentMessages = useCallback(async () => {
     try {
-      const { data } = await api.get("/api/chat/recent-messages", { headers: authHeaders });
+      const { data } = await api.getDedup("/api/chat/recent-messages", { headers: authHeaders });
       if (data.success) setChats(data.data);
-      else toast.error(data.message);
+      else if (data.message !== "Too many requests") toast.error(data.message);
     } catch (error) {
-      toast.error(error.message);
+      if (error?.response?.status !== 429) {
+        toast.error(error.message);
+      }
     }
   }, [authHeaders]);
 
@@ -50,8 +52,23 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
     } else {
       fetchRecentMessages();
     }
-    const interval = setInterval(fetchRecentMessages, 20000);
-    return () => clearInterval(interval);
+
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      fetchRecentMessages();
+    }, 120000);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchRecentMessages();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [user?._id, fetchRecentMessages, suspendInitialFetch]);
 
   useEffect(() => {

@@ -25,6 +25,6 @@ chatRouter.post('/uploadMedia', rateLimit({ prefix: 'chat-upload', windowMs: 60 
 chatRouter.get('/messages/:chatId', rateLimit({ prefix: 'chat-messages', windowMs: 60 * 1000, max: 150 }), getMessages);
 chatRouter.get('/message-viewers/:messageId', getMessageViewers);
 
-chatRouter.get('/recent-messages', rateLimit({ prefix: 'chat-recent', windowMs: 60 * 1000, max: 300 }), getRecentChats);
+chatRouter.get('/recent-messages', rateLimit({ prefix: 'chat-recent', windowMs: 60 * 1000, max: 1200 }), getRecentChats);
 
 export default chatRouter;
