@@ -102,7 +102,7 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
 
   return (
     <div className={clsx("rounded-[2rem] border p-5 shadow-xl", isLight ? "border-slate-200 bg-white shadow-slate-200/30" : isDark ? "border-white/10 bg-black/80 text-white shadow-black/30" : "border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/30")}>
-      <h3 className={clsx("font-semibold", isLight ? "text-slate-900" : isDark ? "text-white" : "text-slate-900")}>Inbox</h3>
+      <h3 className={clsx("font-semibold cursor-pointer", isLight ? "text-slate-900" : isDark ? "text-white" : "text-slate-900")} onClick={() => navigate(`/app/messages`)}>Inbox</h3>
       <div className="mt-4 flex flex-col max-h-80 overflow-y-auto no-scrollbar">
         {chats.map((chat) => {
           const unreadCount = perChat[chat._id] || 0;
