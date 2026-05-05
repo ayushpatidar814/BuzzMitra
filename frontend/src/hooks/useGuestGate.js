@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-const MAX_INTERACTIONS = 1000;
-const MAX_SESSION_MS = 5 * 60 * 1000;
+const MAX_INTERACTIONS = 500;
+const MAX_SESSION_MS = 2 * 60 * 1000;
 
 export const useGuestGate = () => {
   const navigate = useNavigate();
