@@ -197,7 +197,7 @@ const PostCard = ({post, readOnly = false, onRequireAuth, onDeleted, highlighted
           </div>
         </div>
         <div className='relative flex items-center gap-2'>
-          <span className={clsx('rounded-full px-3 py-1 text-xs font-medium', isDark ? 'bg-white/8 text-white/68' : 'bg-slate-100 text-slate-500')}>{entity.is_reel ? "Reel" : "Post"}</span>
+          {/* <span className={clsx('rounded-full px-3 py-1 text-xs font-medium', isDark ? 'bg-white/8 text-white/68' : 'bg-slate-100 text-slate-500')}>{entity.is_reel ? "Reel" : "Post"}</span> */}
           {!readOnly && String(entity.user?._id || "") === String(currentUser?._id || "") && (
             <>
               <button

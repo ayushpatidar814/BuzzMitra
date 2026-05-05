@@ -26,7 +26,7 @@ const Avatar = ({
       className={`overflow-hidden rounded-[0.7rem] bg-slate-200 shadow-sm ring-1 ring-black/5 ${sizeClasses} ${clickable ? "cursor-pointer" : ""} ${className}`}
     >
       <img
-        src={src || "https://placehold.co/240x300"}
+        src={src || "./user_icon.webp"}
         alt={alt}
         className={`h-full w-full object-cover object-center ${imgClassName}`}
       />
