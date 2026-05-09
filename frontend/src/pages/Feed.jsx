@@ -10,7 +10,7 @@ import clsx from 'clsx'
 import { useThemeSettings } from '../theme/ThemeProvider'
 
 const FeedSkeleton = () => (
-  <div className='px-4 pb-12 pt-8 lg:px-8 animate-pulse'>
+  <div className='animate-pulse px-4 pb-12 pt-16 sm:pt-8 lg:px-8'>
     <div className='mx-auto grid max-w-7xl gap-8 xl:grid-cols-[minmax(0,1fr)_320px]'>
       <div className='flex flex-col items-center'>
         <div className='w-full rounded-[2rem] border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-slate-950/20'>
@@ -20,7 +20,7 @@ const FeedSkeleton = () => (
           <div className='mt-2 h-4 w-5/6 rounded-full bg-white/10' />
         </div>
 
-        <div className='mt-6 flex w-full max-w-3xl gap-4 overflow-hidden'>
+        <div className='mt-6 flex w-full max-w-3xl gap-3 overflow-hidden sm:gap-4'>
           <div className='h-56 w-36 shrink-0 rounded-[1.8rem] bg-slate-900/70' />
           <div className='h-56 w-36 shrink-0 rounded-[1.8rem] bg-slate-900/60' />
           <div className='h-56 w-36 shrink-0 rounded-[1.8rem] bg-slate-900/50' />
@@ -50,7 +50,7 @@ const FeedSkeleton = () => (
         </div>
       </div>
 
-      <div className='space-y-4 self-start xl:sticky xl:top-8'>
+      <div className='space-y-4 self-start lg:sticky lg:top-8 lg:max-h-[calc(100dvh-4rem)]'>
         <div className='rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/20'>
           <div className='h-3 w-24 rounded-full bg-slate-200' />
           <div className='mt-4 h-6 w-4/5 rounded-full bg-slate-200' />
@@ -93,6 +93,16 @@ const Feed = () => {
   const { theme } = useThemeSettings()
   const isLight = theme === "light"
   const isDark = theme === "dark"
+  const rightRail = (
+    <>
+      <div className={clsx('rounded-[2rem] border p-5 shadow-xl', isLight ? 'border-slate-200 bg-white shadow-slate-200/30' : isDark ? 'border-white/10 bg-black/80 text-white shadow-black/30' : 'border-white/10 bg-slate-950/70 text-white shadow-slate-950/20')}>
+        <p className={clsx('text-xs uppercase tracking-[0.24em]', isLight ? 'text-cyan-600' : isDark ? 'text-white/58' : 'text-lime-300')}>Get discovered</p>
+        <h3 className={clsx('mt-3 text-xl font-semibold', isLight ? 'text-slate-900' : 'text-white')}>Help the right people find your next reel.</h3>
+        <p className={clsx('mt-2 text-sm', isLight ? 'text-slate-600' : isDark ? 'text-white/68' : 'text-slate-300')}>Choose the right category and audience when you post so your content shows up in the most relevant feed.</p>
+      </div>
+      <RecentMessages initialChats={bootstrappedSidebar ? recentChats : null} suspendInitialFetch={!bootstrappedSidebar} />
+    </>
+  )
 
   const fetchFeeds = useCallback(async (cursor = null, append = false) => {
     try {
@@ -211,12 +221,12 @@ const Feed = () => {
   }, [])
 
   return !loading ? (
-    <div className='px-4 pb-12 pt-8 lg:px-8'>
-      <div className='mx-auto grid max-w-7xl gap-8 xl:grid-cols-[minmax(0,1fr)_320px]'>
+    <div className='px-4 pb-12 pt-16 sm:pt-8 lg:px-8'>
+      <div className='mx-auto max-w-7xl xl:pr-[352px]'>
         <div className='flex flex-col items-center'>
-          <div className={clsx('rounded-[2rem] border p-6 shadow-2xl', isLight ? 'border-slate-200 bg-white/90 text-slate-900 shadow-slate-200/40' : isDark ? 'border-white/10 bg-black/82 text-white shadow-black/35' : 'border-white/10 bg-slate-950/85 text-white shadow-slate-950/30')}>
+          <div className={clsx('w-full rounded-[2rem] border p-5 shadow-2xl sm:p-6', isLight ? 'border-slate-200 bg-white/90 text-slate-900 shadow-slate-200/40' : isDark ? 'border-white/10 bg-black/82 text-white shadow-black/35' : 'border-white/10 bg-slate-950/85 text-white shadow-slate-950/30')}>
             <p className={clsx('text-sm uppercase tracking-[0.24em]', isLight ? 'text-cyan-600' : isDark ? 'text-white/58' : 'text-lime-300')}>Home</p>
-            <h1 className='mt-3 text-3xl font-semibold'>Catch up on stories, posts, and moments you care about.</h1>
+            <h1 className='mt-3 text-2xl font-semibold sm:text-3xl'>Catch up on stories, posts, and moments you care about.</h1>
             <p className={clsx('mt-3 max-w-2xl', isLight ? 'text-slate-600' : isDark ? 'text-white/72' : 'text-slate-300')}>Keep up with people you follow, discover public updates, and jump back into what is trending around you.</p>
           </div>
           <div className='w-full max-w-3xl'>
@@ -250,15 +260,12 @@ const Feed = () => {
             )}
           </div>
         </div>
-
-        <div className='space-y-4 self-start xl:sticky xl:top-8'>
-          <div className={clsx('rounded-[2rem] border p-5 shadow-xl', isLight ? 'border-slate-200 bg-white shadow-slate-200/30' : isDark ? 'border-white/10 bg-black/80 text-white shadow-black/30' : 'border-white/10 bg-slate-950/70 text-white shadow-slate-950/20')}>
-            <p className={clsx('text-xs uppercase tracking-[0.24em]', isLight ? 'text-cyan-600' : isDark ? 'text-white/58' : 'text-lime-300')}>Get discovered</p>
-            <h3 className={clsx('mt-3 text-xl font-semibold', isLight ? 'text-slate-900' : 'text-white')}>Help the right people find your next reel.</h3>
-            <p className={clsx('mt-2 text-sm', isLight ? 'text-slate-600' : isDark ? 'text-white/68' : 'text-slate-300')}>Choose the right category and audience when you post so your content shows up in the most relevant feed.</p>
-          </div>
-          <RecentMessages initialChats={bootstrappedSidebar ? recentChats : null} suspendInitialFetch={!bootstrappedSidebar} />
+        <div className='mt-8 space-y-4 xl:hidden'>
+          {rightRail}
         </div>
+      </div>
+      <div className='fixed right-8 top-8 z-10 hidden w-80 space-y-4 xl:block'>
+        {rightRail}
       </div>
     </div>
   ) : <FeedSkeleton />

@@ -171,7 +171,7 @@ const StoryViewer = ({viewStory, setViewStory, storyGroups = []}) => {
               onChange={(e) => setReplyText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendReply()}
               placeholder={`Reply to ${currentGroup?.user?.full_name || "story"}...`}
-              className="flex-1 bg-transparent text-sm outline-none text-slate-800 placeholder:text-white/60"
+              className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/60"
             />
             <button
               onClick={sendReply}

@@ -155,12 +155,12 @@ const MessageWS = () => {
   if (loading) return <Loading />;
 
   return (
-    <div className="px-4 pb-12 pt-8 lg:px-8">
+    <div className="px-4 pb-12 pt-16 sm:pt-8 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/30">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/30 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-semibold text-slate-900">Messages</h1>
+              <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">Messages</h1>
               <p className="mt-2 text-slate-500">Private chats and groups that stay in sync.</p>
             </div>
             <button onClick={() => setGroupModalOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">
@@ -178,18 +178,18 @@ const MessageWS = () => {
             <VirtualList
               items={filteredChats}
               itemHeight={92}
-              height={Math.min(620, Math.max(220, filteredChats.length * 92))}
+              height={Math.min(560, Math.max(220, filteredChats.length * 92))}
               className="overflow-y-auto no-scrollbar"
               renderItem={(chat) => {
               const otherUser = chat.otherUser;
               const unreadCount = perChat[chat._id] || 0;
               return (
-                <div key={chat._id} onClick={() => { dispatch(resetChatUnread(chat._id)); navigate(`/app/messages/${chat._id}`); }} className={`relative flex gap-4 rounded-[1.5rem] border border-slate-100 p-4 ${unreadCount > 0 ? "bg-lime-50" : "bg-slate-50"} cursor-pointer`}>
+                <div key={chat._id} onClick={() => { dispatch(resetChatUnread(chat._id)); navigate(`/app/messages/${chat._id}`); }} className={`relative flex gap-3 rounded-[1.5rem] border border-slate-100 p-3 sm:gap-4 sm:p-4 ${unreadCount > 0 ? "bg-lime-50" : "bg-slate-50"} cursor-pointer`}>
                   <div className="relative">
                     <Avatar src={chat.isGroup ? chat.avatar : otherUser?.profile_picture} size="sm" alt={chat.isGroup ? chat.title : (otherUser?.full_name || "User")} />
                     {chat.isGroup && <span className="absolute -bottom-1 -right-1 rounded-full bg-slate-950 p-1 text-white"><Users className="h-3 w-3" /></span>}
                   </div>
-                  <div className="flex-1">
+                  <div className="min-w-0 flex-1">
                     <p className="font-semibold text-slate-900">{chat.isGroup ? chat.title : (otherUser?.full_name || "User Name")}</p>
                     <p className="text-sm text-slate-500 truncate">{chat.lastMessage?.text || (chat.lastMessage?.media ? "Media" : "Start a conversation")}</p>
                   </div>
@@ -199,7 +199,7 @@ const MessageWS = () => {
                       <MoreVertical className="w-5 h-5 text-slate-500" />
                     </button>
                     {menuChatId === chat._id && (
-                      <div className="absolute right-0 top-8 z-50 w-40 rounded-2xl border border-slate-200 bg-white shadow-xl">
+                        <div className="absolute right-0 top-8 z-50 w-36 rounded-2xl border border-slate-200 bg-white shadow-xl sm:w-40">
                         <button disabled={clearingChatId === chat._id} onClick={(e) => { e.stopPropagation(); clearChatForMe(chat._id); }} className="w-full px-4 py-3 text-left text-sm text-red-600">
                           {clearingChatId === chat._id ? "Clearing..." : "Delete chat"}
                         </button>
@@ -231,7 +231,7 @@ const MessageWS = () => {
       </div>
       {groupModalOpen && (
         <div className="fixed inset-0 z-[120] bg-black/50 p-4 backdrop-blur-sm">
-          <div className="mx-auto mt-10 max-w-xl rounded-[2rem] bg-white p-6 shadow-2xl">
+          <div className="mx-auto mt-6 max-w-xl rounded-[2rem] bg-white p-4 shadow-2xl sm:mt-10 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm uppercase tracking-[0.22em] text-slate-800">New Group</p>

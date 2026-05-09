@@ -243,17 +243,17 @@ const Profile = () => {
   }
 
   return (
-    <div className='min-h-full bg-[radial-gradient(circle_at_top,_rgba(163,230,53,.12),_transparent_20%),linear-gradient(180deg,_#0f172a_0%,_#111827_20%,_#e2e8f0_20%,_#f8fafc_100%)] px-4 pb-14 pt-8 lg:px-8'>
+    <div className='min-h-full bg-[radial-gradient(circle_at_top,_rgba(163,230,53,.12),_transparent_20%),linear-gradient(180deg,_#0f172a_0%,_#111827_20%,_#e2e8f0_20%,_#f8fafc_100%)] px-4 pb-14 pt-16 sm:pt-8 lg:px-8'>
       <div className='mx-auto max-w-6xl'>
         <div className='rounded-[2.4rem] border border-white/10 bg-white/5 p-2 backdrop-blur-md shadow-[0_24px_70px_rgba(15,23,42,.18)]'>
           <div className='overflow-hidden rounded-[2rem]'>
-            <div className='relative h-64 bg-[linear-gradient(120deg,#bef264_0%,#22d3ee_35%,#f472b6_100%)] md:h-80'>
+            <div className='relative h-48 bg-[linear-gradient(120deg,#bef264_0%,#22d3ee_35%,#f472b6_100%)] sm:h-56 md:h-80'>
               {user.cover_photo && <img src={user.cover_photo} alt='cover_photo' className='h-full w-full object-cover' />}
               <div className='absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,.1),rgba(15,23,42,.58))]' />
-              <div className='absolute inset-x-0 bottom-0 flex items-end justify-between px-6 pb-6 text-white md:px-8'>
+              <div className='absolute inset-x-0 bottom-0 flex flex-col items-start gap-4 px-5 pb-5 text-white sm:flex-row sm:items-end sm:justify-between sm:px-6 md:px-8'>
                 <div>
                   <p className='text-xs uppercase tracking-[0.24em] text-white/70'>Profile</p>
-                  <h2 className='mt-2 text-2xl font-semibold md:text-3xl'>
+                  <h2 className='mt-2 text-xl font-semibold sm:text-2xl md:text-3xl'>
                     {profileId ? `${user.full_name}'s profile` : 'Your profile'}
                   </h2>
                 </div>
@@ -290,15 +290,15 @@ const Profile = () => {
               <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
                 <div>
                   <p className='text-xs uppercase tracking-[0.22em] text-slate-400'>Content</p>
-                  <h3 className='mt-2 text-2xl font-semibold text-slate-900'>{currentTabMeta.title}</h3>
+                  <h3 className='mt-2 text-xl font-semibold text-slate-900 sm:text-2xl'>{currentTabMeta.title}</h3>
                   <p className='mt-1 text-sm text-slate-500'>{currentTabMeta.copy}</p>
                 </div>
-                <div className='inline-flex flex-wrap gap-2 rounded-[1.4rem] bg-slate-100 p-1.5'>
+                <div className='grid w-full grid-cols-1 gap-2 rounded-[1.4rem] bg-slate-100 p-1.5 sm:inline-flex sm:w-auto sm:flex-wrap'>
                   {Object.entries(tabMeta).map(([key, tab]) => (
                     <button
                       key={key}
                       onClick={() => setActiveTab(key)}
-                      className={`inline-flex items-center gap-2 rounded-[1rem] px-4 py-2.5 text-sm font-medium transition ${
+                      className={`inline-flex items-center justify-center gap-2 rounded-[1rem] px-4 py-2.5 text-sm font-medium transition sm:justify-start ${
                         activeTab === key ? 'bg-slate-950 text-white shadow-lg' : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
@@ -381,7 +381,7 @@ const Profile = () => {
             )}
           </div>
 
-          <aside className='space-y-4 xl:sticky xl:top-8 xl:self-start'>
+          <aside className='order-last space-y-4 xl:order-none xl:sticky xl:top-8 xl:self-start'>
             <div className='rounded-[2rem] border border-white/10 bg-slate-950/95 p-5 text-white shadow-2xl shadow-slate-950/30'>
               <p className='text-xs uppercase tracking-[0.22em] text-lime-300'>Profile tips</p>
               <h3 className='mt-3 text-xl font-semibold'>A complete profile helps people connect faster.</h3>

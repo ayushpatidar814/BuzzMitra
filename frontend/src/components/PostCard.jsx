@@ -237,38 +237,40 @@ const PostCard = ({post, readOnly = false, onRequireAuth, onDeleted, highlighted
         </div>
       )}
 
-      <div className={clsx("mt-2 flex items-center justify-between border-y px-5 py-2 text-sm", isDark ? "border-white/10 text-white/72" : "border-slate-100 text-slate-600")}>
-        <button onClick={() => callAction('/api/post/like', { postId: entity._id })} className={clsx('inline-flex items-center gap-2 rounded-full px-4 py-2', isDark ? 'bg-white/8' : 'bg-slate-100')}>
-          <Heart className={`h-6 w-6 ${entity.isLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
-          {`${entity.likeCount ?? 0} likes`}
+      <div className={clsx("mt-2 flex items-center gap-1 border-y px-2 py-3 text-sm sm:gap-2 sm:px-5 sm:py-2", isDark ? "border-white/10 text-white/72" : "border-slate-100 text-slate-600")}>
+        <button onClick={() => callAction('/api/post/like', { postId: entity._id })} className={clsx('inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-2 py-2 sm:gap-2 sm:px-4', isDark ? 'bg-white/8' : 'bg-slate-100')}>
+          <Heart className={`h-4 w-4 shrink-0 sm:h-6 sm:w-6 ${entity.isLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
+          <span className="truncate text-[11px] sm:text-sm">{`${entity.likeCount ?? 0} likes`}</span>
         </button>
-        <button onClick={() => setCommentsOpen((prev) => !prev)} className={clsx('inline-flex items-center gap-2 rounded-full px-4 py-2', isDark ? 'bg-white/8' : 'bg-slate-100')}>
-          <MessageCircle className='h-6 w-6' />
-          {`${entity.commentCount || entity.comments?.length || 0} comments`}
+        <button onClick={() => setCommentsOpen((prev) => !prev)} className={clsx('inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-2 py-2 sm:gap-2 sm:px-4', isDark ? 'bg-white/8' : 'bg-slate-100')}>
+          <MessageCircle className='h-4 w-4 shrink-0 sm:h-6 sm:w-6' />
+          <span className="truncate text-[11px] sm:text-sm">{`${entity.commentCount || entity.comments?.length || 0} comments`}</span>
         </button>
-        <button onClick={sharePost} className={clsx('inline-flex items-center gap-2 rounded-full px-4 py-2', isDark ? 'bg-white/8' : 'bg-slate-100')}>
-          <Send className='h-6 w-6' />
-          {`${entity.shareCount ?? 0} shares`}
+        <button onClick={sharePost} className={clsx('inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-2 py-2 sm:gap-2 sm:px-4', isDark ? 'bg-white/8' : 'bg-slate-100')}>
+          <Send className='h-4 w-4 shrink-0 sm:h-6 sm:w-6' />
+          <span className="truncate text-[11px] sm:text-sm">{`Share`}</span>
         </button>
-        <button onClick={() => callAction('/api/post/save', { postId: entity._id })} className={clsx('inline-flex items-center gap-2 rounded-full px-4 py-2', isDark ? 'bg-white/8' : 'bg-slate-100')}>
-          <Bookmark className={`h-6 w-6 ${entity.isSaved ? 'fill-slate-900 text-slate-900' : ''}`} />
-          Save
+        <button onClick={() => callAction('/api/post/save', { postId: entity._id })} className={clsx('inline-flex min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-2 py-2 sm:gap-2 sm:px-4', isDark ? 'bg-white/8' : 'bg-slate-100')}>
+          <Bookmark className={`h-4 w-4 shrink-0 sm:h-6 sm:w-6 ${entity.isSaved ? 'fill-slate-900 text-slate-900' : ''}`} />
+          <span className="truncate text-[11px] sm:text-sm">Save</span>
         </button>
       </div>
 
-      <div className="px-5 py-4">
-        <div className='flex items-center gap-3'>
+      <div className="px-4 py-4 sm:px-5">
+        <div className='flex items-center gap-2 sm:gap-3'>
           <Avatar src={currentUser?.profile_picture} alt="You" size="sm" />
-          <input
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            onFocus={() => readOnly && onRequireAuth?.()}
-            onKeyDown={(e) => e.key === "Enter" && submitComment()}
-            placeholder={readOnly ? 'Create an account to comment...' : 'Write a comment...'}
-            disabled={readOnly}
-            className={clsx('flex-1 rounded-2xl border px-4 py-3 text-sm outline-none', isDark ? 'border-white/10 bg-white/5 text-white placeholder:text-white/35 disabled:bg-white/4 disabled:text-white/30' : 'border-slate-200 disabled:bg-slate-50 text-slate-800')}
-          />
-          <button onClick={submitComment} className={clsx('rounded-2xl px-4 py-3 text-sm font-semibold', isDark ? 'bg-white text-black' : 'bg-slate-950 text-white')}>{readOnly ? 'Join' : 'Post'}</button>
+          <div className='flex flex-1 items-center gap-2 sm:gap-3'>
+            <input
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              onFocus={() => readOnly && onRequireAuth?.()}
+              onKeyDown={(e) => e.key === "Enter" && submitComment()}
+              placeholder={readOnly ? 'Create an account to comment...' : 'Write a comment...'}
+              disabled={readOnly}
+              className={clsx('flex-1 rounded-2xl border px-4 py-3 text-sm outline-none', isDark ? 'border-white/20 bg-white/5 text-white placeholder:text-white/35 disabled:bg-white/4 disabled:text-white/30' : 'border-slate-300 disabled:bg-slate-50 text-slate-800')}
+            />
+            <button onClick={submitComment} className={clsx('shrink-0 rounded-2xl px-3 py-2 text-xs font-semibold sm:min-w-[88px] sm:px-4 sm:py-3 sm:text-sm', isDark ? 'bg-white text-black' : 'bg-slate-950/80 text-white')}>{readOnly ? 'Join' : 'Post'}</button>
+          </div>
         </div>
 
         {commentsOpen && (

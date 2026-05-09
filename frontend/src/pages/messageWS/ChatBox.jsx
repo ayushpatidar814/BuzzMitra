@@ -379,8 +379,8 @@ const ChatBox = () => {
   if (!chatMeta) return <Loading />;
 
   return (
-    <div className="flex h-screen flex-col bg-[radial-gradient(circle_at_top,_rgba(190,242,100,.15),_transparent_20%),linear-gradient(180deg,_#f8fafc,_#eef2ff)]">
-      <div className="flex items-center gap-3 border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur md:px-10">
+    <div className="flex h-[100dvh] flex-col bg-[radial-gradient(circle_at_top,_rgba(190,242,100,.15),_transparent_20%),linear-gradient(180deg,_#f8fafc,_#eef2ff)]">
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-white/80 px-4 py-4 pr-3 backdrop-blur md:px-10">
         <Avatar
           src={chatMeta.isGroup ? chatMeta.groupAvatar : user?.profile_picture}
           size="sm"
@@ -393,14 +393,14 @@ const ChatBox = () => {
           </p>
         </div>
         {chatMeta.isGroup && (
-          <button onClick={() => setGroupSheetOpen(true)} className="ml-auto inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          <button onClick={() => setGroupSheetOpen(true)} className="ml-auto inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-xs text-slate-700 sm:text-sm">
             <Users className="h-4 w-4 text-slate-400" />
             Group info
           </button>
         )}
       </div>
 
-      <div className="h-full overflow-y-scroll no-scrollbar p-5 md:px-10" style={{ backgroundImage: `url(${chatBg})` }}>
+      <div className="h-full overflow-y-scroll no-scrollbar px-3 py-4 sm:p-5 md:px-10" style={{ backgroundImage: `url(${chatBg})` }}>
         <div className="mx-auto max-w-5xl space-y-4">
           {hasMoreMessages && (
             <div className="flex justify-center">
@@ -418,7 +418,7 @@ const ChatBox = () => {
 
             return (
               <div key={`${message.messageId}-${message.createdAt}`} className={`group flex ${isSender ? "justify-end" : "justify-start"}`}>
-                <div className="relative max-w-md">
+                <div className="relative max-w-[85vw] sm:max-w-md">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -454,7 +454,7 @@ const ChatBox = () => {
                     )}
 
                     {message.type === "media" && message.media && (
-                      <img src={message.media.url} alt="media" className="mb-2 h-72 w-72 max-w-full rounded-2xl object-cover" />
+                      <img src={message.media.url} alt="media" className="mb-2 h-56 w-56 max-w-full rounded-2xl object-cover sm:h-72 sm:w-72" />
                     )}
                     {message.text && <p className="text-slate-900">{message.text}</p>}
 
@@ -498,7 +498,7 @@ const ChatBox = () => {
       </div>
 
       <div className="px-4">
-        <div className="mx-auto mb-5 flex max-w-xl items-center gap-3 rounded-full border bg-white p-2 pl-5 text-slate-900">
+        <div className="mx-auto mb-5 flex max-w-xl items-center gap-2 rounded-full border bg-white p-2 pl-4 text-slate-900 sm:gap-3 sm:pl-5">
           <input
             type="text"
             className="flex-1 outline-none"
@@ -541,7 +541,7 @@ const ChatBox = () => {
 
       {viewerModal && (
         <div className="fixed inset-0 z-[120] bg-black/50 p-4 backdrop-blur-sm">
-          <div className="mx-auto mt-12 max-w-md rounded-[2rem] bg-white p-6 shadow-2xl">
+          <div className="mx-auto mt-8 max-w-md rounded-[2rem] bg-white p-4 shadow-2xl sm:mt-12 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm uppercase tracking-[0.22em] text-slate-600">Message status</p>
@@ -572,7 +572,7 @@ const ChatBox = () => {
       {groupSheetOpen && chatMeta?.isGroup && (
         <div className="fixed inset-0 z-[120] bg-black/50 p-4 backdrop-blur-sm">
           <div className="mx-auto mt-4 flex max-h-[calc(100vh-2rem)] max-w-lg flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5">
               <div>
                 <p className="text-sm uppercase tracking-[0.22em] text-slate-800">Group details</p>
                 <h3 className="mt-2 text-xl font-semibold text-slate-900">{chatMeta.groupName}</h3>
@@ -581,8 +581,8 @@ const ChatBox = () => {
               <button onClick={() => setGroupSheetOpen(false)} className="rounded-full bg-slate-900 px-3 py-1 text-sm">Close</button>
             </div>
 
-            <div className="overflow-y-auto no-scrollbar px-6 py-5">
-              <div className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4">
+            <div className="overflow-y-auto no-scrollbar px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex flex-col items-start gap-4 rounded-2xl bg-slate-50 p-4 sm:flex-row sm:items-center">
                 <Avatar src={groupAvatarFile ? URL.createObjectURL(groupAvatarFile) : chatMeta.groupAvatar} size="xl" alt={chatMeta.groupName} />
                 <div>
                   <p className="font-medium text-slate-900">Group photo</p>
@@ -609,7 +609,7 @@ const ChatBox = () => {
                 <p className="text-sm font-medium text-slate-900">Members</p>
                 <div className="mt-3 max-h-56 space-y-3 overflow-y-auto no-scrollbar">
                   {(chatMeta.participants || []).map((member) => (
-                    <div key={member._id} className="flex items-center justify-between rounded-2xl bg-white px-3 py-3">
+                    <div key={member._id} className="flex flex-col gap-3 rounded-2xl bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <button
                         type="button"
                         onClick={() => navigate(`/app/profile/${member._id}`)}
@@ -699,8 +699,8 @@ const ChatBox = () => {
                 <>
                   <div className="mt-5">
                     <label className="text-sm font-medium text-slate-900">Rename group</label>
-                    <div className="mt-2 flex gap-2">
-                      <input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="flex-1 rounded-2xl border border-slate-200 text-slate-800 px-4 py-3 outline-none" />
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-slate-800 outline-none" />
                       <button disabled={groupActionLoading} onClick={renameGroup} className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white">Save</button>
                     </div>
                   </div>

@@ -39,19 +39,19 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
   return (
     <div
-      className={clsx(`sticky top-0 h-screen w-72 border-r backdrop-blur-xl flex flex-col justify-between max-sm:absolute max-sm:inset-y-0 z-20
+      className={clsx(`z-20 flex h-[100dvh] w-[17rem] shrink-0 self-start flex-col justify-between overflow-y-auto border-r backdrop-blur-xl sm:w-72 max-sm:fixed max-sm:inset-y-0 lg:fixed lg:left-0 lg:top-0
       ${sidebarOpen ? "translate-x-0" : "max-sm:-translate-x-full"}
       transition-all duration-300 ease-in-out`, isLight ? "bg-white/92 text-slate-900 border-slate-200/80 shadow-xl shadow-slate-200/40" : isDark ? "bg-black/95 text-white border-white/10 shadow-2xl shadow-black/40" : "bg-slate-950/92 text-white border-white/10")}
     >
       <div className="w-full">
-        <img onClick={() => navigate("/app")} src="/newLogo.png" alt="logo" className="w-28 ml-6 my-2 cursor-pointer" />
+        <img onClick={() => navigate("/app")} src="/newLogo.png" alt="logo" className="ml-5 my-3 w-24 cursor-pointer sm:ml-6 sm:w-28" />
 
-        <div className={clsx("mx-6 mb-6 rounded-3xl border p-4", isLight ? "border-cyan-100 bg-gradient-to-br from-lime-50 via-cyan-50 to-fuchsia-50" : isDark ? "border-white/10 bg-gradient-to-br from-white/7 via-white/4 to-transparent" : "border-lime-300/20 bg-gradient-to-br from-lime-300/10 via-cyan-400/5 to-fuchsia-400/10")}>
+        <div className={clsx("mx-4 mb-5 rounded-3xl border p-4 sm:mx-6 sm:mb-6", isLight ? "border-cyan-100 bg-gradient-to-br from-lime-50 via-cyan-50 to-fuchsia-50" : isDark ? "border-white/10 bg-gradient-to-br from-white/7 via-white/4 to-transparent" : "border-lime-300/20 bg-gradient-to-br from-lime-300/10 via-cyan-400/5 to-fuchsia-400/10")}>
           <p className={clsx("text-xs uppercase tracking-[0.28em]", isLight ? "text-cyan-700" : isDark ? "text-white/55" : "text-lime-200/70")}>Today on BuzzMitra</p>
           <h2 className={clsx("mt-2 text-xm font-semibold leading-tight", isLight ? "text-slate-900" : "text-white")}>Catch up on people you follow, jump into chats, and discover what is trending.</h2>
         </div>
 
-        <div className="px-4 space-y-2">
+        <div className="space-y-2 px-3 sm:px-4">
           {menuItems.map((item) => (
             <NavLink
               key={item.to}
@@ -83,14 +83,14 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         <Link
           to="/app/create-post"
           onClick={() => setSidebarOpen(false)}
-          className="flex items-center justify-center gap-2 py-3 mt-6 mx-6 rounded-2xl bg-gradient-to-r from-lime-300 via-cyan-300 to-fuchsia-300 hover:brightness-105 active:scale-95 transition text-slate-950 font-semibold"
+          className="mx-4 mt-6 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-lime-300 via-cyan-300 to-fuchsia-300 py-3 font-semibold text-slate-950 transition hover:brightness-105 active:scale-95 sm:mx-6"
         >
           <CirclePlus className="w-5 h-5" />
           Create
         </Link>
       </div>
 
-      <div className={clsx("w-full border-t p-4 px-6 flex items-center justify-between", isLight ? "border-slate-200" : "border-white/10")}>
+      <div className={clsx("flex w-full items-center justify-between border-t p-4 px-4 sm:px-6", isLight ? "border-slate-200" : "border-white/10")}>
         <div className="flex gap-3 items-center">
           <Avatar src={user?.profile_picture} alt={user?.full_name || "Profile"} size="sm" className={clsx("border", isLight ? "border-slate-200 bg-slate-100" : isDark ? "border-white/10 bg-white/6" : "border-white/10 bg-white/10")} />
           <div>
