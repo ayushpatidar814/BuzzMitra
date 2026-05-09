@@ -40,6 +40,10 @@ app.use(
   })
 );
 
+app.get("/loaderio-e58cabdbaf8bb537775c0ff2efd506f2.txt", (req, res) => {
+  res.status(200).send("loaderio-e58cabdbaf8bb537775c0ff2efd506f2");
+});
+
 /* ---------------- ROUTES ---------------- */
 
 app.get('/', (req, res) => {
