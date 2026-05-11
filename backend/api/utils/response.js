@@ -23,9 +23,9 @@ export const paginated = (
     message,
     data: {
       ...data,
-      items,
       nextCursor,
       hasMore,
+      count: items.length,
     },
     [itemKey]: items,
     nextCursor,

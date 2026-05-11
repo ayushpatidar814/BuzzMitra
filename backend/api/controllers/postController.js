@@ -24,19 +24,55 @@ const normalizeUserSummary = (user) =>
       }
     : null;
 
+const normalizeMusic = (music = {}) => {
+  const normalized = {
+    title: String(music?.title || "").trim(),
+    artist: String(music?.artist || "").trim(),
+    url: String(music?.url || "").trim(),
+  };
+  return normalized.title || normalized.artist || normalized.url ? normalized : null;
+};
+
+const serializePostForClient = (post, reactionTypes = new Set(), comments = []) => {
+  const normalized = post?.toObject?.() || post || {};
+  return {
+    _id: String(normalized._id),
+    user: normalizeUserSummary(normalized.user),
+    content: normalized.content || "",
+    caption: normalized.caption || "",
+    image_urls: normalized.image_urls || [],
+    media_url: normalized.media_url || "",
+    thumbnail_url: normalized.thumbnail_url || "",
+    media_type: normalized.media_type || "none",
+    post_type: normalized.post_type || "text",
+    is_reel: Boolean(normalized.is_reel),
+    duration_seconds: Number(normalized.duration_seconds || 0),
+    reel_emojis: normalized.reel_emojis || "",
+    gif_url: normalized.gif_url || "",
+    music: normalizeMusic(normalized.music),
+    view_count: Number(normalized.view_count || 0),
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    likeCount: Number(normalized.likes_count || 0),
+    shareCount: Number(normalized.shares_count || 0),
+    saveCount: Number(normalized.saves_count || 0),
+    isLiked: reactionTypes.has("like"),
+    isSaved: reactionTypes.has("save"),
+    comments,
+    commentCount: flattenCommentCount(comments),
+  };
+};
+
 const buildCommentTree = (commentDocs = [], currentUserId) => {
   const nodes = new Map();
 
   commentDocs.forEach((comment) => {
     nodes.set(String(comment._id), {
       _id: String(comment._id),
-      post: String(comment.post),
       parentComment: comment.parentComment ? String(comment.parentComment) : null,
       user: normalizeUserSummary(comment.user),
       text: comment.text,
-      mentions: comment.mentions || [],
       createdAt: comment.createdAt,
-      updatedAt: comment.updatedAt,
       likeCount: comment.likes_count ?? comment.liked_by?.length ?? 0,
       isLiked: currentUserId
         ? (comment.liked_by || []).some((id) => String(id) === String(currentUserId))
@@ -107,16 +143,7 @@ const uploadMedia = async (file, folder = "posts") => {
 };
 
 const decoratePost = (post, reactionTypes = new Set()) => {
-  const normalized = post.toObject?.() || post;
-  return {
-    ...normalized,
-    user: normalizeUserSummary(normalized.user),
-    likeCount: normalized.likes_count ?? 0,
-    shareCount: normalized.shares_count ?? 0,
-    saveCount: normalized.saves_count ?? 0,
-    isLiked: reactionTypes.has("like"),
-    isSaved: reactionTypes.has("save"),
-  };
+  return serializePostForClient(post, reactionTypes, []);
 };
 
 const flattenCommentCount = (comments = []) =>
@@ -131,11 +158,7 @@ export const enrichPosts = async (posts, currentUserId) => {
 
   return posts.map((post) => {
     const comments = commentMap.get(String(post._id)) || [];
-    return {
-      ...decoratePost(post, reactionMap.get(String(post._id)) || new Set()),
-      comments,
-      commentCount: flattenCommentCount(comments),
-    };
+    return serializePostForClient(post, reactionMap.get(String(post._id)) || new Set(), comments);
   });
 };
 
@@ -367,14 +390,17 @@ const loadFeedPosts = async ({ viewerId, isReel = false, cursor, limit = 12 }) =
     {
       $lookup: {
         from: "users",
-        localField: "user",
-        foreignField: "_id",
+        let: { userId: "$user" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+          { $project: { _id: 1, full_name: 1, username: 1, profile_picture: 1 } },
+        ],
         as: "user",
       },
     },
     { $unwind: "$user" }
   );
-
+  
   const posts = await Post.aggregate(pipeline);
   const hasMore = posts.length > parsedLimit;
   const items = posts.slice(0, parsedLimit);
@@ -538,8 +564,11 @@ const loadRecommendedReels = async ({ viewerId, cursor, limit = 8 }) => {
     {
       $lookup: {
         from: "users",
-        localField: "user",
-        foreignField: "_id",
+        let: { userId: "$user" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+          { $project: { _id: 1, full_name: 1, username: 1, profile_picture: 1 } },
+        ],
         as: "user",
       },
     },
@@ -676,7 +705,14 @@ export const getPublicFeedPosts = async (req, res) => {
 
     const { items, hasMore, nextCursor } = await loadFeedPosts({ viewerId: null, isReel: false, cursor, limit });
     const enrichedItems = await enrichPosts(items, null);
-    const payload = { success: true, posts: enrichedItems, hasMore, nextCursor, data: { items: enrichedItems, hasMore, nextCursor }, meta: { count: enrichedItems.length, hasMore, nextCursor } };
+    const payload = {
+      success: true,
+      posts: enrichedItems,
+      hasMore,
+      nextCursor,
+      data: { hasMore, nextCursor, count: enrichedItems.length },
+      meta: { count: enrichedItems.length, hasMore, nextCursor },
+    };
     await setCache(cacheKey, payload, 90);
     return res.json(payload);
   } catch (error) {
@@ -737,7 +773,7 @@ export const getPublicReels = async (req, res) => {
       reels: items,
       nextCursor: hasMore ? items[items.length - 1]?.createdAt : null,
       hasMore,
-      data: { items, hasMore, nextCursor: hasMore ? items[items.length - 1]?.createdAt : null },
+      data: { hasMore, nextCursor: hasMore ? items[items.length - 1]?.createdAt : null, count: items.length },
       meta: { count: items.length, hasMore, nextCursor: hasMore ? items[items.length - 1]?.createdAt : null },
     };
     await setCache(cacheKey, payload, 90);
@@ -1120,11 +1156,13 @@ export const trackReelWatchTime = async (req, res) => {
     }
 
     await bufferReelWatchTime(postId, seconds);
+
     return res.json({
       success: true,
       watch_time_total: Number(post.watch_time_total || 0) + Math.round(seconds),
       watch_sessions_count: Number(post.watch_sessions_count || 0) + 1,
     });
+    
   } catch (error) {
     console.log(error);
     return res.status(500).json({ success: false, message: error.message });

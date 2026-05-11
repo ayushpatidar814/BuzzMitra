@@ -49,6 +49,23 @@ const isGroupOwner = (chat, userId) => String(chat.groupOwnerId) === String(user
 const buildUnreadChatsCount = (chats, userId) =>
   chats.filter((chat) => Number(chat.unreadCount?.[String(userId)] || 0) > 0).length;
 
+const normalizeChatListMessage = (message) =>
+  message
+    ? {
+        messageId: message.messageId,
+        text: message.text || "",
+        type: message.type || "text",
+        media: message.media
+          ? {
+              url: message.media.url || "",
+              thumbnail: message.media.thumbnail || "",
+            }
+          : null,
+        createdAt: message.createdAt,
+        senderId: message.senderId ? String(message.senderId) : "",
+      }
+    : null;
+
 const buildChatSummaries = async (userId, limit) => {
   const chats = await Chat.find({ participants: userId, isGroup: false })
     .populate("lastMessage")
@@ -76,7 +93,7 @@ const buildChatSummaries = async (userId, limit) => {
         title: userMap.get(String(otherUserId))?.full_name || "Conversation",
         avatar: userMap.get(String(otherUserId))?.profile_picture || "",
         otherUser: userMap.get(String(otherUserId)) || null,
-        lastMessage,
+        lastMessage: normalizeChatListMessage(lastMessage),
         unreadMessages,
         updatedAt: chat.updatedAt,
       };
@@ -106,7 +123,7 @@ const buildGroupSummaries = async (userId, limit) => {
         avatar: chat.groupAvatar || "",
         groupName: chat.groupName || "Group",
         groupAvatar: chat.groupAvatar || "",
-        lastMessage,
+        lastMessage: normalizeChatListMessage(lastMessage),
         unreadMessages,
         updatedAt: chat.updatedAt,
       };
@@ -254,9 +271,6 @@ const getMessages = async (req, res) => {
         hasMore,
         nextCursor: hasMore && pageMessages.length ? encodeMessageCursor(pageMessages[0]) : null,
       },
-      messages: normalizedMessages,
-      nextCursor: hasMore && pageMessages.length ? encodeMessageCursor(pageMessages[0]) : null,
-      hasMore,
       meta: {
         nextCursor: hasMore && pageMessages.length ? encodeMessageCursor(pageMessages[0]) : null,
         hasMore,

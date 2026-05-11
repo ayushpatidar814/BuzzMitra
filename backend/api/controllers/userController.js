@@ -18,7 +18,7 @@ import { createNotification } from "../services/notification.service.js";
 import { serializeAuthUser, serializeUserProfile, serializeUserSummary } from "../utils/serialize.js";
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-const USER_SUMMARY_FIELDS = "full_name username bio profile_picture cover_photo location followers_count following_count account_visibility role preferences createdAt updatedAt";
+const USER_LIST_FIELDS = "full_name username bio profile_picture location followers_count following_count";
 
 const normalizeBaseUrl = (value = "") => String(value || "").replace(/\/+$/, "");
 
@@ -528,16 +528,17 @@ export const unfollowUser = async (req, res) => {
 export const getUserConnections = async (req, res) => {
   try {
     const [followersEdges, followingEdges] = await Promise.all([
-      Follow.find({ followingId: req.userId }).sort({ createdAt: -1 }).populate("followerId", USER_SUMMARY_FIELDS).lean(),
-      Follow.find({ followerId: req.userId }).sort({ createdAt: -1 }).populate("followingId", USER_SUMMARY_FIELDS).lean(),
+      Follow.find({ followingId: req.userId }).sort({ createdAt: -1 }).populate("followerId", USER_LIST_FIELDS).lean(),
+      Follow.find({ followerId: req.userId }).sort({ createdAt: -1 }).populate("followingId", USER_LIST_FIELDS).lean(),
     ]);
 
     const followers = serializeListedUsers(followersEdges.map((edge) => edge.followerId).filter(Boolean));
     const following = serializeListedUsers(followingEdges.map((edge) => edge.followingId).filter(Boolean));
 
     const network = Array.from(new Map([...followers, ...following].map((item) => [String(item._id), item])).values());
-    return ok(res, {
-      data: { followers, following, network },
+    return res.json({
+      success: true,
+      message: "OK",
       followers,
       following,
       network,
@@ -571,8 +572,8 @@ export const getUserProfiles = async (req, res) => {
     const [posts, reels, followersPreviewEdges, followingPreviewEdges] = await Promise.all([
       Post.find({ user: profile._id, is_reel: false }).populate("user", "full_name username profile_picture").sort({ createdAt: -1 }).limit(12),
       Post.find({ user: profile._id, is_reel: true }).populate("user", "full_name username profile_picture").sort({ createdAt: -1 }).limit(9),
-      Follow.find({ followingId: profile._id }).sort({ createdAt: -1 }).limit(8).populate("followerId", USER_SUMMARY_FIELDS).lean(),
-      Follow.find({ followerId: profile._id }).sort({ createdAt: -1 }).limit(8).populate("followingId", USER_SUMMARY_FIELDS).lean(),
+      Follow.find({ followingId: profile._id }).sort({ createdAt: -1 }).limit(8).populate("followerId", USER_LIST_FIELDS).lean(),
+      Follow.find({ followerId: profile._id }).sort({ createdAt: -1 }).limit(8).populate("followingId", USER_LIST_FIELDS).lean(),
     ]);
     const enrichedPosts = await enrichPosts(posts, req.userId);
     const enrichedReels = await enrichPosts(reels, req.userId);
@@ -597,8 +598,6 @@ export const getUserProfiles = async (req, res) => {
         includeEmail: resolvedProfileId === viewerId,
         includeRelations: resolvedProfileId === viewerId,
       }),
-      followers,
-      following,
       stats,
       posts: enrichedPosts,
       reels: enrichedReels,
@@ -705,7 +704,7 @@ export const getProfileConnectionsPage = async (req, res) => {
     const edges = await Follow.find(edgeFilter)
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit + 1)
-      .populate(type === "followers" ? "followerId" : "followingId", USER_SUMMARY_FIELDS)
+      .populate(type === "followers" ? "followerId" : "followingId", USER_LIST_FIELDS)
       .lean();
 
     const hasMore = edges.length > limit;
