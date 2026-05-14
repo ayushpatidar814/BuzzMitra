@@ -57,6 +57,14 @@ app.use('/api/story', storyRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/notifications', notificationRouter);
 
+app.get("/api/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Server is running",
+    timestamp: new Date(),
+  });
+});
+
 app.use((req, res) => {
   return res.status(404).json({ success: false, message: "API route not found" });
 });
