@@ -21,6 +21,7 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
   const { perChat } = useSelector((state) => state.chatCount);
   const { network = [] } = useSelector((state) => state.connections);
   const bootstrappedRef = useRef(Boolean(initialChats));
+  const fetchedOnceRef = useRef(Boolean(initialChats));
   const { theme } = useThemeSettings();
   const isLight = theme === "light";
   const isDark = theme === "dark";
@@ -41,39 +42,25 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
     if (initialChats) {
       setChats(initialChats);
       bootstrappedRef.current = true;
+      fetchedOnceRef.current = true;
     }
   }, [initialChats]);
 
   useEffect(() => {
-    if (suspendInitialFetch) return;
-    if (!user?._id) return;
+    if (suspendInitialFetch || !user?._id || fetchedOnceRef.current) return;
+    fetchedOnceRef.current = true;
+
     if (bootstrappedRef.current) {
       bootstrappedRef.current = false;
-    } else {
-      fetchRecentMessages();
+      return;
     }
 
-    const interval = setInterval(() => {
-      if (document.hidden) return;
-      fetchRecentMessages();
-    }, 120000);
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        fetchRecentMessages();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    fetchRecentMessages();
   }, [user?._id, fetchRecentMessages, suspendInitialFetch]);
 
   useEffect(() => {
     if (!socket || !user?._id) return;
-    const handleInboxMessage = (message) => {
+    const upsertChatFromMessage = (message) => {
       setChats((prev) => {
         const index = prev.findIndex((chat) => chat._id === message.chatId);
         if (index !== -1) {
@@ -96,8 +83,16 @@ const RecentMessages = ({ initialChats = null, suspendInitialFetch = false }) =>
       });
     };
 
-    socket.on("inbox_message", handleInboxMessage);
-    return () => socket.off("inbox_message", handleInboxMessage);
+    const handleInboxMessageBatch = (messages = []) => {
+      messages.forEach(upsertChatFromMessage);
+    };
+
+    socket.on("inbox_message", upsertChatFromMessage);
+    socket.on("inbox_message_batch", handleInboxMessageBatch);
+    return () => {
+      socket.off("inbox_message", upsertChatFromMessage);
+      socket.off("inbox_message_batch", handleInboxMessageBatch);
+    };
   }, [socket, user?._id, network]);
 
   return (

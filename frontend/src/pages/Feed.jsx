@@ -90,6 +90,8 @@ const Feed = () => {
   const highlightedPostId = new URLSearchParams(search).get("post")
   const postRefs = useRef({})
   const sentinelRef = useRef(null)
+  const initialFeedLoadedRef = useRef(false)
+  const sidebarFetchStartedRef = useRef(false)
   const { theme } = useThemeSettings()
   const isLight = theme === "light"
   const isDark = theme === "dark"
@@ -153,6 +155,7 @@ const Feed = () => {
       setNextCursor(feedData.nextCursor || null)
       setHasMore(Boolean(feedData.hasMore))
       setStories(storiesData.stories || [])
+      initialFeedLoadedRef.current = true
     } catch (error) {
       toast.error(error.message)
     } finally {
@@ -161,17 +164,23 @@ const Feed = () => {
   }, [authHeaders])
 
   const fetchDeferredSidebarData = useCallback(async () => {
+    if (sidebarFetchStartedRef.current) return
+    sidebarFetchStartedRef.current = true
+
     try {
       const { data } = await api.getDedup('/api/chat/recent-messages', { headers: authHeaders })
       if (!data.success) throw new Error(data.message)
       setRecentChats(data.data || [])
       setBootstrappedSidebar(true)
     } catch (error) {
+      sidebarFetchStartedRef.current = false
       toast.error(error.message)
     }
   }, [authHeaders])
 
   useEffect(() => {
+    initialFeedLoadedRef.current = false
+    sidebarFetchStartedRef.current = false
     setFeeds([])
     setStories([])
     setRecentChats([])
@@ -182,13 +191,13 @@ const Feed = () => {
   }, [fetchInitialFeedData])
 
   useEffect(() => {
-    if (loading) return
+    if (loading || !initialFeedLoadedRef.current || bootstrappedSidebar) return
     const timer = window.setTimeout(() => {
       fetchDeferredSidebarData()
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [fetchDeferredSidebarData, loading])
+  }, [bootstrappedSidebar, fetchDeferredSidebarData, loading])
 
   useEffect(() => {
     if (!highlightedPostId || loading) return
@@ -260,12 +269,9 @@ const Feed = () => {
             )}
           </div>
         </div>
-        <div className='mt-8 space-y-4 xl:hidden'>
+        <div className='mt-8 space-y-4 xl:fixed xl:right-8 xl:top-8 xl:mt-0 xl:w-80'>
           {rightRail}
         </div>
-      </div>
-      <div className='fixed right-8 top-8 z-10 hidden w-80 space-y-4 xl:block'>
-        {rightRail}
       </div>
     </div>
   ) : <FeedSkeleton />

@@ -3,9 +3,17 @@ import { getRedis } from "../configs/redis.js";
 const inMemoryStore = new Map();
 
 const getClientKey = (req, prefix) => {
-  const auth = req.userId ? `user:${req.userId}` : null;
-  const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
-  return `${prefix}:${auth || `ip:${ip}`}`;
+  if (req.userId) {
+    return `${prefix}:user:${req.userId}`;
+  }
+
+  const forwarded = req.headers["x-forwarded-for"];
+
+  const ip = forwarded
+    ? forwarded.split(",")[0].trim()
+    : req.socket.remoteAddress || "unknown";
+
+  return `${prefix}:ip:${ip}`;
 };
 
 const touchMemoryEntry = (key, windowMs) => {
@@ -33,14 +41,41 @@ export const rateLimit = ({ prefix, windowMs = 60_000, max = 500, message = "Too
   const redis = getRedis();
 
   try {
+    // if (redis) {
+    //   const total = await redis.incr(key);
+    //   if (total === 1) {
+    //     await redis.expire(key, Math.ceil(windowMs / 1000));
+    //   }
+
+    //   if (total > max) {
+    //     return res.status(429).json({ success: false, message });
+    //   }
+
+    //   return next();
+    // }
+
     if (redis) {
-      const total = await redis.incr(key);
-      if (total === 1) {
-        await redis.expire(key, Math.ceil(windowMs / 1000));
+      const current = await redis.get(key);
+
+      if (!current) {
+        await redis.set(
+          key,
+          1,
+          {
+            ex: Math.ceil(windowMs / 1000)
+          }
+        );
+
+        return next();
       }
 
+      const total = await redis.incr(key);
+
       if (total > max) {
-        return res.status(429).json({ success: false, message });
+        return res.status(429).json({
+          success: false,
+          message
+        });
       }
 
       return next();
